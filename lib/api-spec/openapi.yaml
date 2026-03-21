@@ -1,22 +1,28 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Estate Agent CRM API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: contacts
+    description: CRM contact operations
+  - name: conversations
+    description: Conversation and messaging operations
+  - name: messages
+    description: Message operations
+  - name: dashboard
+    description: Dashboard metrics
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +30,228 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /contacts:
+    get:
+      operationId: listContacts
+      tags: [contacts]
+      summary: List all contacts
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: leadIntent
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Contact"
+    post:
+      operationId: createContact
+      tags: [contacts]
+      summary: Create a new contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContactRequest"
+      responses:
+        "201":
+          description: Created contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+
+  /contacts/{id}:
+    get:
+      operationId: getContact
+      tags: [contacts]
+      summary: Get a contact by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+        "404":
+          description: Not found
+    put:
+      operationId: updateContact
+      tags: [contacts]
+      summary: Update a contact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateContactRequest"
+      responses:
+        "200":
+          description: Updated contact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Contact"
+    delete:
+      operationId: deleteContact
+      tags: [contacts]
+      summary: Delete a contact
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /conversations:
+    get:
+      operationId: listConversations
+      tags: [conversations]
+      summary: List all conversations
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: channel
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Conversation"
+    post:
+      operationId: createConversation
+      tags: [conversations]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationRequest"
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Conversation"
+
+  /conversations/{id}:
+    get:
+      operationId: getConversation
+      tags: [conversations]
+      summary: Get a conversation by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationDetail"
+        "404":
+          description: Not found
+
+  /conversations/{id}/messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      summary: List messages in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      summary: Send a message in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+      responses:
+        "201":
+          description: Sent message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+  /dashboard/metrics:
+    get:
+      operationId: getDashboardMetrics
+      tags: [dashboard]
+      summary: Get dashboard metrics
+      responses:
+        "200":
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardMetrics"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +262,333 @@ components:
       required:
         - status
 
+    Contact:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        leadIntent:
+          type: string
+          nullable: true
+          description: "buyer, renter, landlord, vendor"
+        summary:
+          type: string
+          nullable: true
+          description: Summary of what the prospect is looking for
+        propertyInMind:
+          type: string
+          nullable: true
+        bedrooms:
+          type: integer
+          nullable: true
+        budget:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - phone
+        - tags
+        - createdAt
+        - updatedAt
+
+    CreateContactRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        leadIntent:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        propertyInMind:
+          type: string
+          nullable: true
+        bedrooms:
+          type: integer
+          nullable: true
+        budget:
+          type: string
+          nullable: true
+      required:
+        - name
+        - phone
+
+    UpdateContactRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        leadIntent:
+          type: string
+          nullable: true
+        summary:
+          type: string
+          nullable: true
+        propertyInMind:
+          type: string
+          nullable: true
+        bedrooms:
+          type: integer
+          nullable: true
+        budget:
+          type: string
+          nullable: true
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: integer
+        contactId:
+          type: integer
+        contactName:
+          type: string
+        contactPhone:
+          type: string
+        channel:
+          type: string
+          description: "whatsapp, sms, email"
+        status:
+          type: string
+          description: "active, closed, pending"
+        lastMessage:
+          type: string
+          nullable: true
+        lastMessageAt:
+          type: string
+          format: date-time
+          nullable: true
+        unreadCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - contactId
+        - contactName
+        - contactPhone
+        - channel
+        - status
+        - unreadCount
+        - createdAt
+
+    ConversationDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        contactId:
+          type: integer
+        contactName:
+          type: string
+        contactPhone:
+          type: string
+        channel:
+          type: string
+        status:
+          type: string
+        lastMessage:
+          type: string
+          nullable: true
+        lastMessageAt:
+          type: string
+          format: date-time
+          nullable: true
+        unreadCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+      required:
+        - id
+        - contactId
+        - contactName
+        - contactPhone
+        - channel
+        - status
+        - unreadCount
+        - createdAt
+        - messages
+
+    CreateConversationRequest:
+      type: object
+      properties:
+        contactId:
+          type: integer
+        channel:
+          type: string
+      required:
+        - contactId
+        - channel
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        direction:
+          type: string
+          description: "inbound, outbound"
+        content:
+          type: string
+        sentAt:
+          type: string
+          format: date-time
+        senderName:
+          type: string
+          nullable: true
+      required:
+        - id
+        - conversationId
+        - direction
+        - content
+        - sentAt
+
+    SendMessageRequest:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
+
+    DashboardMetrics:
+      type: object
+      properties:
+        leadsEngaged:
+          type: integer
+        leadsEngagedInstantly:
+          type: integer
+        viewingsBooked:
+          type: integer
+        reactivatedLeads:
+          type: integer
+        referralLeads:
+          type: integer
+        portalLeadsQualified:
+          type: integer
+        hotLeads:
+          type: integer
+        buyers:
+          type: integer
+        renters:
+          type: integer
+        landlordsVendors:
+          type: integer
+        costSavingsGBP:
+          type: number
+        timeSavingsHours:
+          type: number
+        newConversationsLastWeek:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyCount"
+        messagesByChannel:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChannelCount"
+        funnel:
+          $ref: "#/components/schemas/FunnelData"
+      required:
+        - leadsEngaged
+        - leadsEngagedInstantly
+        - viewingsBooked
+        - reactivatedLeads
+        - referralLeads
+        - portalLeadsQualified
+        - hotLeads
+        - buyers
+        - renters
+        - landlordsVendors
+        - costSavingsGBP
+        - timeSavingsHours
+        - newConversationsLastWeek
+        - messagesByChannel
+        - funnel
+
+    DailyCount:
+      type: object
+      properties:
+        date:
+          type: string
+        count:
+          type: integer
+      required:
+        - date
+        - count
+
+    ChannelCount:
+      type: object
+      properties:
+        channel:
+          type: string
+        count:
+          type: integer
+      required:
+        - channel
+        - count
+
+    FunnelData:
+      type: object
+      properties:
+        newLeads:
+          type: integer
+        engaged:
+          type: integer
+        qualified:
+          type: integer
+        viewingsBooked:
+          type: integer
+        offers:
+          type: integer
+      required:
+        - newLeads
+        - engaged
+        - qualified
+        - viewingsBooked
+        - offers

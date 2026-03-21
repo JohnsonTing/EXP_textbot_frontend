@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Estate Agent CRM"
+version = "1.0.0"
+id = "artifacts/estate-agent"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25645
+
+[services.development]
+run = "pnpm --filter @workspace/estate-agent run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/estate-agent", "run", "build" ]
+publicDir = "artifacts/estate-agent/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25645"
+BASE_PATH = "/"

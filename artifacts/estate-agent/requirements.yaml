@@ -1,0 +1,12 @@
+packages:
+  "date-fns": "For formatting message timestamps and contact dates"
+  "recharts": "For rendering beautiful dashboard charts"
+  "react-hook-form": "For robust contact creation and editing forms"
+  "@hookform/resolvers": "For zod validation integration with react-hook-form"
+  "zod": "For defining client-side form schemas"
+  "clsx": "For classname merging in custom components"
+  "tailwind-merge": "For classname conflict resolution"
+
+notes:
+  - "Using existing @workspace/api-client-react hooks for all data fetching"
+  - "Assuming standard Shadcn UI component API for Dialog, Card, Input, Button, Badge"
