@@ -8,8 +8,8 @@
 import type { Message } from "./message";
 
 export interface ConversationDetail {
-  id: number;
-  contactId: number;
+  id: string;
+  contactId: string;
   contactName: string;
   contactPhone: string;
   channel: string;

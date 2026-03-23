@@ -1,167 +1,120 @@
 import { Router, type IRouter } from "express";
-import { db, contactsTable, conversationsTable, messagesTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { scanAllConversationsByPhone, getMessagesByPhone, scanCustomers, type DynamoMessage } from "../lib/dynamodb";
 
 const router: IRouter = Router();
 
+function buildConversationList(
+  grouped: Record<string, DynamoMessage[]>,
+  customers: Record<string, { name: string; phone: string; customerId: string }>
+) {
+  return Object.entries(grouped)
+    .map(([phone, messages]) => {
+      const sorted = [...messages].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      const last = sorted[sorted.length - 1];
+      const customer = customers[phone];
+      return {
+        id: phone,
+        contactId: customer?.customerId ?? phone,
+        contactName: customer?.name ?? phone,
+        contactPhone: phone,
+        channel: "whatsapp",
+        status: "active",
+        lastMessage: last?.message ?? null,
+        lastMessageAt: last?.timestamp ?? null,
+        unreadCount: 0,
+        createdAt: sorted[0]?.timestamp ?? new Date().toISOString(),
+        messageCount: messages.length,
+      };
+    })
+    .sort((a, b) => {
+      const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+      const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+      return tb - ta;
+    });
+}
+
 router.get("/conversations", async (req, res) => {
   try {
-    const { search, channel } = req.query as Record<string, string>;
+    const { search } = req.query as Record<string, string>;
 
-    const rows = await db
-      .select({
-        id: conversationsTable.id,
-        contactId: conversationsTable.contactId,
-        contactName: contactsTable.name,
-        contactPhone: contactsTable.phone,
-        channel: conversationsTable.channel,
-        status: conversationsTable.status,
-        lastMessage: conversationsTable.lastMessage,
-        lastMessageAt: conversationsTable.lastMessageAt,
-        unreadCount: conversationsTable.unreadCount,
-        createdAt: conversationsTable.createdAt,
-      })
-      .from(conversationsTable)
-      .innerJoin(contactsTable, eq(conversationsTable.contactId, contactsTable.id))
-      .orderBy(desc(conversationsTable.lastMessageAt));
+    const [grouped, allCustomers] = await Promise.all([
+      scanAllConversationsByPhone(),
+      scanCustomers(),
+    ]);
 
-    let result = rows;
+    const customersByPhone: Record<string, { name: string; phone: string; customerId: string }> = {};
+    for (const c of allCustomers) {
+      const ph = c.phone || c.customer_id;
+      if (ph) {
+        const name = c.contact_name && c.contact_name.trim() ? c.contact_name.trim() : ph;
+        customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id };
+      }
+    }
+
+    let result = buildConversationList(grouped, customersByPhone);
+
     if (search) {
+      const q = search.toLowerCase();
       result = result.filter(
         (r) =>
-          r.contactName.toLowerCase().includes(search.toLowerCase()) ||
-          r.contactPhone.includes(search)
+          r.contactName.toLowerCase().includes(q) ||
+          r.contactPhone.includes(q) ||
+          (r.lastMessage ?? "").toLowerCase().includes(q)
       );
-    }
-    if (channel) {
-      result = result.filter((r) => r.channel === channel);
     }
 
     res.json(result);
   } catch (err) {
-    req.log.error({ err }, "Failed to list conversations");
+    req.log.error({ err }, "Failed to list conversations from DynamoDB");
     res.status(500).json({ error: "Failed to list conversations" });
   }
 });
 
-router.post("/conversations", async (req, res) => {
+router.get("/conversations/:phone", async (req, res) => {
   try {
-    const { contactId, channel } = req.body;
-    if (!contactId || !channel) {
-      res.status(400).json({ error: "contactId and channel are required" });
-      return;
-    }
-    const [contact] = await db.select().from(contactsTable).where(eq(contactsTable.id, contactId));
-    if (!contact) {
-      res.status(404).json({ error: "Contact not found" });
-      return;
-    }
-    const [conv] = await db.insert(conversationsTable).values({ contactId, channel }).returning();
-    res.status(201).json({
-      ...conv,
-      contactName: contact.name,
-      contactPhone: contact.phone,
+    const phone = decodeURIComponent(req.params.phone);
+
+    const [messages, allCustomers] = await Promise.all([
+      getMessagesByPhone(phone),
+      scanCustomers(),
+    ]);
+
+    const customer = allCustomers.find((c) => c.phone === phone);
+
+    const sorted = [...messages].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+
+    const mappedMessages = sorted.map((m) => ({
+      id: m.message_id,
+      conversationId: phone,
+      direction: m.role === "user" ? "inbound" : "outbound",
+      content: m.message,
+      role: m.role,
+      senderName: m.role === "user" ? (customer?.contact_name ?? phone) : "Assistant",
+      sentAt: m.timestamp,
+    }));
+
+    const last = sorted[sorted.length - 1];
+
+    res.json({
+      id: phone,
+      contactId: customer?.customer_id ?? phone,
+      contactName: customer?.contact_name ?? phone,
+      contactPhone: phone,
+      channel: "whatsapp",
+      status: "active",
+      lastMessage: last?.message ?? null,
+      lastMessageAt: last?.timestamp ?? null,
+      unreadCount: 0,
+      createdAt: sorted[0]?.timestamp ?? new Date().toISOString(),
+      messages: mappedMessages,
     });
   } catch (err) {
-    req.log.error({ err }, "Failed to create conversation");
-    res.status(500).json({ error: "Failed to create conversation" });
-  }
-});
-
-router.get("/conversations/:id", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-
-    const [row] = await db
-      .select({
-        id: conversationsTable.id,
-        contactId: conversationsTable.contactId,
-        contactName: contactsTable.name,
-        contactPhone: contactsTable.phone,
-        channel: conversationsTable.channel,
-        status: conversationsTable.status,
-        lastMessage: conversationsTable.lastMessage,
-        lastMessageAt: conversationsTable.lastMessageAt,
-        unreadCount: conversationsTable.unreadCount,
-        createdAt: conversationsTable.createdAt,
-      })
-      .from(conversationsTable)
-      .innerJoin(contactsTable, eq(conversationsTable.contactId, contactsTable.id))
-      .where(eq(conversationsTable.id, id));
-
-    if (!row) {
-      res.status(404).json({ error: "Conversation not found" });
-      return;
-    }
-
-    const messages = await db
-      .select()
-      .from(messagesTable)
-      .where(eq(messagesTable.conversationId, id))
-      .orderBy(messagesTable.sentAt);
-
-    await db
-      .update(conversationsTable)
-      .set({ unreadCount: 0 })
-      .where(eq(conversationsTable.id, id));
-
-    res.json({ ...row, messages });
-  } catch (err) {
-    req.log.error({ err }, "Failed to get conversation");
+    req.log.error({ err }, "Failed to get conversation from DynamoDB");
     res.status(500).json({ error: "Failed to get conversation" });
-  }
-});
-
-router.get("/conversations/:id/messages", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const messages = await db
-      .select()
-      .from(messagesTable)
-      .where(eq(messagesTable.conversationId, id))
-      .orderBy(messagesTable.sentAt);
-    res.json(messages);
-  } catch (err) {
-    req.log.error({ err }, "Failed to list messages");
-    res.status(500).json({ error: "Failed to list messages" });
-  }
-});
-
-router.post("/conversations/:id/messages", async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    const { content } = req.body;
-
-    if (!content || typeof content !== "string") {
-      res.status(400).json({ error: "content is required" });
-      return;
-    }
-
-    const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id));
-    if (!conv) {
-      res.status(404).json({ error: "Conversation not found" });
-      return;
-    }
-
-    const [message] = await db
-      .insert(messagesTable)
-      .values({
-        conversationId: id,
-        direction: "outbound",
-        content,
-        senderName: "Agent",
-      })
-      .returning();
-
-    await db
-      .update(conversationsTable)
-      .set({ lastMessage: content, lastMessageAt: new Date() })
-      .where(eq(conversationsTable.id, id));
-
-    res.status(201).json(message);
-  } catch (err) {
-    req.log.error({ err }, "Failed to send message");
-    res.status(500).json({ error: "Failed to send message" });
   }
 });
 

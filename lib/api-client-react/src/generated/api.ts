@@ -738,14 +738,14 @@ export const useCreateConversation = <
 };
 
 /**
- * @summary Get a conversation by ID
+ * @summary Get a conversation by ID (phone number)
  */
-export const getGetConversationUrl = (id: number) => {
+export const getGetConversationUrl = (id: string) => {
   return `/api/conversations/${id}`;
 };
 
 export const getConversation = async (
-  id: number,
+  id: string,
   options?: RequestInit,
 ): Promise<ConversationDetail> => {
   return customFetch<ConversationDetail>(getGetConversationUrl(id), {
@@ -754,7 +754,7 @@ export const getConversation = async (
   });
 };
 
-export const getGetConversationQueryKey = (id: number) => {
+export const getGetConversationQueryKey = (id: string) => {
   return [`/api/conversations/${id}`] as const;
 };
 
@@ -762,7 +762,7 @@ export const getGetConversationQueryOptions = <
   TData = Awaited<ReturnType<typeof getConversation>>,
   TError = ErrorType<void>,
 >(
-  id: number,
+  id: string,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getConversation>>,
@@ -798,14 +798,14 @@ export type GetConversationQueryResult = NonNullable<
 export type GetConversationQueryError = ErrorType<void>;
 
 /**
- * @summary Get a conversation by ID
+ * @summary Get a conversation by ID (phone number)
  */
 
 export function useGetConversation<
   TData = Awaited<ReturnType<typeof getConversation>>,
   TError = ErrorType<void>,
 >(
-  id: number,
+  id: string,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getConversation>>,

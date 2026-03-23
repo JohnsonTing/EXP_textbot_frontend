@@ -7,8 +7,9 @@
  */
 
 export interface Conversation {
-  id: number;
-  contactId: number;
+  /** Phone number used as conversation ID */
+  id: string;
+  contactId: string;
   contactName: string;
   contactPhone: string;
   /** whatsapp, sms, email */
@@ -18,5 +19,6 @@ export interface Conversation {
   lastMessage?: string | null;
   lastMessageAt?: Date | null;
   unreadCount: number;
+  messageCount?: number;
   createdAt: Date;
 }

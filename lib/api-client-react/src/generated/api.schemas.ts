@@ -60,8 +60,9 @@ export interface UpdateContactRequest {
 }
 
 export interface Conversation {
-  id: number;
-  contactId: number;
+  /** Phone number used as conversation ID */
+  id: string;
+  contactId: string;
   contactName: string;
   contactPhone: string;
   /** whatsapp, sms, email */
@@ -71,22 +72,26 @@ export interface Conversation {
   lastMessage?: string | null;
   lastMessageAt?: string | null;
   unreadCount: number;
+  messageCount?: number;
   createdAt: string;
 }
 
 export interface Message {
-  id: number;
-  conversationId: number;
+  /** message_id from DynamoDB */
+  id: string;
+  conversationId: string;
   /** inbound, outbound */
   direction: string;
+  /** user, assistant */
+  role?: string;
   content: string;
   sentAt: string;
   senderName?: string | null;
 }
 
 export interface ConversationDetail {
-  id: number;
-  contactId: number;
+  id: string;
+  contactId: string;
   contactName: string;
   contactPhone: string;
   channel: string;
@@ -99,7 +104,7 @@ export interface ConversationDetail {
 }
 
 export interface CreateConversationRequest {
-  contactId: number;
+  contactId: string;
   channel: string;
 }
 

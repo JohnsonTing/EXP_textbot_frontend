@@ -1,9 +1,9 @@
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
-import { logger } from "./logger";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 export const CUSTOMERS_TABLE = "Customers";
+export const CONVERSATIONS_TABLE = "Conversations";
 
 function createClient() {
   const client = new DynamoDBClient({
@@ -114,6 +114,51 @@ export async function deleteCustomer(customerId: string): Promise<void> {
 function nonEmpty(val: string | undefined | null): string | null {
   if (!val || val.trim() === "") return null;
   return val;
+}
+
+export interface DynamoMessage {
+  phone_number: string;
+  message_id: string;
+  message: string;
+  role: string;
+  timestamp: string;
+}
+
+export async function scanAllConversationsByPhone(): Promise<Record<string, DynamoMessage[]>> {
+  const client = getDynamoClient();
+  const grouped: Record<string, DynamoMessage[]> = {};
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new ScanCommand({
+      TableName: CONVERSATIONS_TABLE,
+      ExclusiveStartKey: lastKey,
+    }));
+    for (const item of (result.Items ?? []) as DynamoMessage[]) {
+      if (!grouped[item.phone_number]) grouped[item.phone_number] = [];
+      grouped[item.phone_number].push(item);
+    }
+    lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+  return grouped;
+}
+
+export async function getMessagesByPhone(phoneNumber: string): Promise<DynamoMessage[]> {
+  const client = getDynamoClient();
+  const messages: DynamoMessage[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const result = await client.send(new ScanCommand({
+      TableName: CONVERSATIONS_TABLE,
+      FilterExpression: "phone_number = :ph",
+      ExpressionAttributeValues: { ":ph": phoneNumber },
+      ExclusiveStartKey: lastKey,
+    }));
+    for (const item of (result.Items ?? []) as DynamoMessage[]) {
+      messages.push(item);
+    }
+    lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+  return messages;
 }
 
 export function mapDynamoToContact(c: DynamoCustomer) {

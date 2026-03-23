@@ -174,8 +174,8 @@ export const ListConversationsQueryParams = zod.object({
 });
 
 export const ListConversationsResponseItem = zod.object({
-  id: zod.number(),
-  contactId: zod.number(),
+  id: zod.string().describe("Phone number used as conversation ID"),
+  contactId: zod.string(),
   contactName: zod.string(),
   contactPhone: zod.string(),
   channel: zod.string().describe("whatsapp, sms, email"),
@@ -183,6 +183,7 @@ export const ListConversationsResponseItem = zod.object({
   lastMessage: zod.string().nullish(),
   lastMessageAt: zod.date().nullish(),
   unreadCount: zod.number(),
+  messageCount: zod.number().optional(),
   createdAt: zod.date(),
 });
 export const ListConversationsResponse = zod.array(
@@ -193,20 +194,20 @@ export const ListConversationsResponse = zod.array(
  * @summary Create a new conversation
  */
 export const CreateConversationBody = zod.object({
-  contactId: zod.number(),
+  contactId: zod.string(),
   channel: zod.string(),
 });
 
 /**
- * @summary Get a conversation by ID
+ * @summary Get a conversation by ID (phone number)
  */
 export const GetConversationParams = zod.object({
-  id: zod.coerce.number(),
+  id: zod.coerce.string(),
 });
 
 export const GetConversationResponse = zod.object({
-  id: zod.number(),
-  contactId: zod.number(),
+  id: zod.string(),
+  contactId: zod.string(),
   contactName: zod.string(),
   contactPhone: zod.string(),
   channel: zod.string(),
@@ -217,9 +218,10 @@ export const GetConversationResponse = zod.object({
   createdAt: zod.date(),
   messages: zod.array(
     zod.object({
-      id: zod.number(),
-      conversationId: zod.number(),
+      id: zod.string().describe("message_id from DynamoDB"),
+      conversationId: zod.string(),
       direction: zod.string().describe("inbound, outbound"),
+      role: zod.string().optional().describe("user, assistant"),
       content: zod.string(),
       sentAt: zod.date(),
       senderName: zod.string().nullish(),
@@ -235,9 +237,10 @@ export const ListMessagesParams = zod.object({
 });
 
 export const ListMessagesResponseItem = zod.object({
-  id: zod.number(),
-  conversationId: zod.number(),
+  id: zod.string().describe("message_id from DynamoDB"),
+  conversationId: zod.string(),
   direction: zod.string().describe("inbound, outbound"),
+  role: zod.string().optional().describe("user, assistant"),
   content: zod.string(),
   sentAt: zod.date(),
   senderName: zod.string().nullish(),

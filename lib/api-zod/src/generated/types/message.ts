@@ -7,10 +7,13 @@
  */
 
 export interface Message {
-  id: number;
-  conversationId: number;
+  /** message_id from DynamoDB */
+  id: string;
+  conversationId: string;
   /** inbound, outbound */
   direction: string;
+  /** user, assistant */
+  role?: string;
   content: string;
   sentAt: Date;
   senderName?: string | null;

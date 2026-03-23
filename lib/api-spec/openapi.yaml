@@ -178,13 +178,13 @@ paths:
     get:
       operationId: getConversation
       tags: [conversations]
-      summary: Get a conversation by ID
+      summary: Get a conversation by ID (phone number)
       parameters:
         - name: id
           in: path
           required: true
           schema:
-            type: integer
+            type: string
       responses:
         "200":
           description: Conversation with messages
@@ -393,9 +393,10 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          description: Phone number used as conversation ID
         contactId:
-          type: integer
+          type: string
         contactName:
           type: string
         contactPhone:
@@ -415,6 +416,8 @@ components:
           nullable: true
         unreadCount:
           type: integer
+        messageCount:
+          type: integer
         createdAt:
           type: string
           format: date-time
@@ -432,9 +435,9 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
         contactId:
-          type: integer
+          type: string
         contactName:
           type: string
         contactPhone:
@@ -474,7 +477,7 @@ components:
       type: object
       properties:
         contactId:
-          type: integer
+          type: string
         channel:
           type: string
       required:
@@ -485,12 +488,16 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          description: message_id from DynamoDB
         conversationId:
-          type: integer
+          type: string
         direction:
           type: string
           description: "inbound, outbound"
+        role:
+          type: string
+          description: "user, assistant"
         content:
           type: string
         sentAt:

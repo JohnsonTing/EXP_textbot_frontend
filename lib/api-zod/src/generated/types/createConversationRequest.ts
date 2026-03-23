@@ -7,6 +7,6 @@
  */
 
 export interface CreateConversationRequest {
-  contactId: number;
+  contactId: string;
   channel: string;
 }
