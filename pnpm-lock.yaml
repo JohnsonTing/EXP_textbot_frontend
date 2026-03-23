@@ -647,6 +647,13 @@ importers:
         version: 0.31.9
 
   scripts:
+    dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: ^3.1014.0
+        version: 3.1014.0
+      '@aws-sdk/lib-dynamodb':
+        specifier: ^3.1014.0
+        version: 3.1014.0(@aws-sdk/client-dynamodb@3.1014.0)
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
