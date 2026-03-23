@@ -10,18 +10,27 @@ export interface HealthStatus {
 }
 
 export interface Contact {
-  id: number;
+  /** DynamoDB customer_id (UUID) */
+  id: string;
   name: string;
   email?: string | null;
   phone: string;
   tags: string[];
-  /** buyer, renter, landlord, vendor */
+  /** buyer, renter, landlord, vendor, investment, home buyer */
   leadIntent?: string | null;
   /** Summary of what the prospect is looking for */
   summary?: string | null;
+  /** URL or description of property in mind */
   propertyInMind?: string | null;
   bedrooms?: number | null;
   budget?: string | null;
+  enquiryPostcode?: string | null;
+  /** terraced, flat, detached */
+  enquiryPropType?: string | null;
+  /** active or inactive */
+  status?: string | null;
+  /** JSON string of similar scraped listings */
+  scrapedListings?: string | null;
   createdAt: string;
   updatedAt: string;
 }

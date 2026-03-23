@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useListContacts, useCreateContact, useUpdateContact, useDeleteContact } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { format } from "date-fns";
-import { Search, Plus, Filter, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, Target } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, MapPin, Building2, ExternalLink, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -237,15 +237,32 @@ export default function Contacts() {
                         )}
                       </td>
                       <td className="px-6 py-4 space-y-1 text-muted-foreground">
-                        {contact.propertyInMind && (
-                          <div className="flex items-center gap-2" title="Property in mind">
-                            <Home size={14} /> <span className="truncate max-w-[150px]">{contact.propertyInMind}</span>
+                        {contact.enquiryPostcode && (
+                          <div className="flex items-center gap-2" title="Postcode">
+                            <MapPin size={14} /> <span>{contact.enquiryPostcode}</span>
+                          </div>
+                        )}
+                        {contact.enquiryPropType && (
+                          <div className="flex items-center gap-2" title="Property type">
+                            <Building2 size={14} /> <span className="capitalize">{contact.enquiryPropType}</span>
                           </div>
                         )}
                         {(contact.bedrooms || contact.budget) && (
                           <div className="flex items-center gap-3">
                             {contact.bedrooms && <span className="flex items-center gap-1"><BedDouble size={14} /> {contact.bedrooms}</span>}
                             {contact.budget && <span className="flex items-center gap-1"><PoundSterling size={14} /> {contact.budget}</span>}
+                          </div>
+                        )}
+                        {contact.propertyInMind && (
+                          <div className="flex items-center gap-2" title="Property enquired about">
+                            <Home size={14} />
+                            {contact.propertyInMind.startsWith('http') ? (
+                              <a href={contact.propertyInMind} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 truncate max-w-[140px]">
+                                View listing <ExternalLink size={10} />
+                              </a>
+                            ) : (
+                              <span className="truncate max-w-[140px]">{contact.propertyInMind}</span>
+                            )}
                           </div>
                         )}
                       </td>

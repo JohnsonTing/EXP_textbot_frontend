@@ -1,112 +1,119 @@
 import { Router, type IRouter } from "express";
-import { db, contactsTable, insertContactSchema, updateContactSchema } from "@workspace/db";
-import { eq, ilike, sql } from "drizzle-orm";
+import { v4 as uuidv4 } from "uuid";
+import {
+  scanCustomers,
+  getCustomer,
+  putCustomer,
+  updateCustomer,
+  deleteCustomer,
+  mapDynamoToContact,
+  DynamoCustomer,
+} from "../lib/dynamodb";
 
 const router: IRouter = Router();
 
 router.get("/contacts", async (req, res) => {
   try {
     const { search, tag, leadIntent } = req.query as Record<string, string>;
-    let query = db.select().from(contactsTable);
-
-    const conditions: ReturnType<typeof ilike>[] = [];
+    let customers = await scanCustomers();
 
     if (search) {
-      conditions.push(ilike(contactsTable.name, `%${search}%`));
-    }
-    if (leadIntent) {
-      conditions.push(eq(contactsTable.leadIntent, leadIntent) as any);
-    }
-
-    let contacts = await query;
-
-    if (tag) {
-      contacts = contacts.filter((c) =>
-        Array.isArray(c.tags) && (c.tags as string[]).includes(tag)
-      );
-    }
-
-    if (search) {
-      contacts = contacts.filter(
+      const q = search.toLowerCase();
+      customers = customers.filter(
         (c) =>
-          c.name.toLowerCase().includes(search.toLowerCase()) ||
-          c.phone.includes(search) ||
-          (c.email && c.email.toLowerCase().includes(search.toLowerCase()))
+          (c.contact_name ?? "").toLowerCase().includes(q) ||
+          (c.phone ?? "").includes(q) ||
+          (c.email ?? "").toLowerCase().includes(q)
       );
     }
-
+    if (tag) {
+      customers = customers.filter(
+        (c) => Array.isArray(c.tags) && c.tags.includes(tag)
+      );
+    }
     if (leadIntent) {
-      contacts = contacts.filter((c) => c.leadIntent === leadIntent);
+      customers = customers.filter((c) => c.lead_intent === leadIntent);
     }
 
-    res.json(contacts);
+    res.json(customers.map(mapDynamoToContact));
   } catch (err) {
-    req.log.error({ err }, "Failed to list contacts");
+    req.log.error({ err }, "Failed to list contacts from DynamoDB");
     res.status(500).json({ error: "Failed to list contacts" });
   }
 });
 
 router.post("/contacts", async (req, res) => {
   try {
-    const parsed = insertContactSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
-      return;
-    }
-    const [contact] = await db.insert(contactsTable).values(parsed.data).returning();
-    res.status(201).json(contact);
+    const body = req.body;
+    const now = new Date().toISOString();
+    const item: DynamoCustomer = {
+      customer_id: uuidv4(),
+      contact_name: body.name,
+      email: body.email ?? undefined,
+      phone: body.phone,
+      tags: body.tags ?? [],
+      lead_intent: body.leadIntent ?? undefined,
+      summary: body.summary ?? undefined,
+      property_in_mind: body.propertyInMind ?? undefined,
+      enquiry_bedrooms: body.bedrooms ?? undefined,
+      enquiry_max_price: body.budget ? parseInt(body.budget.replace(/[^0-9]/g, "")) || undefined : undefined,
+      status: "active",
+      created_at: now,
+      updated_at: now,
+    };
+    await putCustomer(item);
+    res.status(201).json(mapDynamoToContact(item));
   } catch (err) {
-    req.log.error({ err }, "Failed to create contact");
+    req.log.error({ err }, "Failed to create contact in DynamoDB");
     res.status(500).json({ error: "Failed to create contact" });
   }
 });
 
 router.get("/contacts/:id", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const [contact] = await db.select().from(contactsTable).where(eq(contactsTable.id, id));
-    if (!contact) {
+    const customer = await getCustomer(req.params.id);
+    if (!customer) {
       res.status(404).json({ error: "Contact not found" });
       return;
     }
-    res.json(contact);
+    res.json(mapDynamoToContact(customer));
   } catch (err) {
-    req.log.error({ err }, "Failed to get contact");
+    req.log.error({ err }, "Failed to get contact from DynamoDB");
     res.status(500).json({ error: "Failed to get contact" });
   }
 });
 
 router.put("/contacts/:id", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    const parsed = updateContactSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: "Invalid request", details: parsed.error.issues });
-      return;
-    }
-    const [contact] = await db
-      .update(contactsTable)
-      .set({ ...parsed.data, updatedAt: new Date() })
-      .where(eq(contactsTable.id, id))
-      .returning();
-    if (!contact) {
+    const body = req.body;
+    const updated = await updateCustomer(req.params.id, {
+      contact_name: body.name,
+      email: body.email,
+      phone: body.phone,
+      tags: body.tags,
+      lead_intent: body.leadIntent,
+      summary: body.summary,
+      property_in_mind: body.propertyInMind,
+      enquiry_bedrooms: body.bedrooms,
+      enquiry_max_price: body.budget ? parseInt(body.budget.replace(/[^0-9]/g, "")) || undefined : undefined,
+    });
+    if (!updated) {
       res.status(404).json({ error: "Contact not found" });
       return;
     }
-    res.json(contact);
+    res.json(mapDynamoToContact(updated));
   } catch (err) {
-    req.log.error({ err }, "Failed to update contact");
+    req.log.error({ err }, "Failed to update contact in DynamoDB");
     res.status(500).json({ error: "Failed to update contact" });
   }
 });
 
 router.delete("/contacts/:id", async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
-    await db.delete(contactsTable).where(eq(contactsTable.id, id));
+    await deleteCustomer(req.params.id);
     res.status(204).send();
   } catch (err) {
-    req.log.error({ err }, "Failed to delete contact");
+    req.log.error({ err }, "Failed to delete contact from DynamoDB");
     res.status(500).json({ error: "Failed to delete contact" });
   }
 });

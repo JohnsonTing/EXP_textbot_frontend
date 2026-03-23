@@ -266,7 +266,8 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          description: DynamoDB customer_id (UUID)
         name:
           type: string
         email:
@@ -281,7 +282,7 @@ components:
         leadIntent:
           type: string
           nullable: true
-          description: "buyer, renter, landlord, vendor"
+          description: "buyer, renter, landlord, vendor, investment, home buyer"
         summary:
           type: string
           nullable: true
@@ -289,12 +290,28 @@ components:
         propertyInMind:
           type: string
           nullable: true
+          description: URL or description of property in mind
         bedrooms:
           type: integer
           nullable: true
         budget:
           type: string
           nullable: true
+        enquiryPostcode:
+          type: string
+          nullable: true
+        enquiryPropType:
+          type: string
+          nullable: true
+          description: "terraced, flat, detached"
+        status:
+          type: string
+          nullable: true
+          description: "active or inactive"
+        scrapedListings:
+          type: string
+          nullable: true
+          description: JSON string of similar scraped listings
         createdAt:
           type: string
           format: date-time

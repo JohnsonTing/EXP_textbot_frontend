@@ -24,7 +24,7 @@ export const ListContactsQueryParams = zod.object({
 });
 
 export const ListContactsResponseItem = zod.object({
-  id: zod.number(),
+  id: zod.string().describe("DynamoDB customer_id (UUID)"),
   name: zod.string(),
   email: zod.string().nullish(),
   phone: zod.string(),
@@ -32,14 +32,24 @@ export const ListContactsResponseItem = zod.object({
   leadIntent: zod
     .string()
     .nullish()
-    .describe("buyer, renter, landlord, vendor"),
+    .describe("buyer, renter, landlord, vendor, investment, home buyer"),
   summary: zod
     .string()
     .nullish()
     .describe("Summary of what the prospect is looking for"),
-  propertyInMind: zod.string().nullish(),
+  propertyInMind: zod
+    .string()
+    .nullish()
+    .describe("URL or description of property in mind"),
   bedrooms: zod.number().nullish(),
   budget: zod.string().nullish(),
+  enquiryPostcode: zod.string().nullish(),
+  enquiryPropType: zod.string().nullish().describe("terraced, flat, detached"),
+  status: zod.string().nullish().describe("active or inactive"),
+  scrapedListings: zod
+    .string()
+    .nullish()
+    .describe("JSON string of similar scraped listings"),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -68,7 +78,7 @@ export const GetContactParams = zod.object({
 });
 
 export const GetContactResponse = zod.object({
-  id: zod.number(),
+  id: zod.string().describe("DynamoDB customer_id (UUID)"),
   name: zod.string(),
   email: zod.string().nullish(),
   phone: zod.string(),
@@ -76,14 +86,24 @@ export const GetContactResponse = zod.object({
   leadIntent: zod
     .string()
     .nullish()
-    .describe("buyer, renter, landlord, vendor"),
+    .describe("buyer, renter, landlord, vendor, investment, home buyer"),
   summary: zod
     .string()
     .nullish()
     .describe("Summary of what the prospect is looking for"),
-  propertyInMind: zod.string().nullish(),
+  propertyInMind: zod
+    .string()
+    .nullish()
+    .describe("URL or description of property in mind"),
   bedrooms: zod.number().nullish(),
   budget: zod.string().nullish(),
+  enquiryPostcode: zod.string().nullish(),
+  enquiryPropType: zod.string().nullish().describe("terraced, flat, detached"),
+  status: zod.string().nullish().describe("active or inactive"),
+  scrapedListings: zod
+    .string()
+    .nullish()
+    .describe("JSON string of similar scraped listings"),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
@@ -108,7 +128,7 @@ export const UpdateContactBody = zod.object({
 });
 
 export const UpdateContactResponse = zod.object({
-  id: zod.number(),
+  id: zod.string().describe("DynamoDB customer_id (UUID)"),
   name: zod.string(),
   email: zod.string().nullish(),
   phone: zod.string(),
@@ -116,14 +136,24 @@ export const UpdateContactResponse = zod.object({
   leadIntent: zod
     .string()
     .nullish()
-    .describe("buyer, renter, landlord, vendor"),
+    .describe("buyer, renter, landlord, vendor, investment, home buyer"),
   summary: zod
     .string()
     .nullish()
     .describe("Summary of what the prospect is looking for"),
-  propertyInMind: zod.string().nullish(),
+  propertyInMind: zod
+    .string()
+    .nullish()
+    .describe("URL or description of property in mind"),
   bedrooms: zod.number().nullish(),
   budget: zod.string().nullish(),
+  enquiryPostcode: zod.string().nullish(),
+  enquiryPropType: zod.string().nullish().describe("terraced, flat, detached"),
+  status: zod.string().nullish().describe("active or inactive"),
+  scrapedListings: zod
+    .string()
+    .nullish()
+    .describe("JSON string of similar scraped listings"),
   createdAt: zod.date(),
   updatedAt: zod.date(),
 });
