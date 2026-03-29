@@ -230,28 +230,10 @@ export const GetConversationResponse = zod.object({
 });
 
 /**
- * @summary List messages in a conversation
- */
-export const ListMessagesParams = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const ListMessagesResponseItem = zod.object({
-  id: zod.string().describe("message_id from DynamoDB"),
-  conversationId: zod.string(),
-  direction: zod.string().describe("inbound, outbound"),
-  role: zod.string().optional().describe("user, assistant"),
-  content: zod.string(),
-  sentAt: zod.date(),
-  senderName: zod.string().nullish(),
-});
-export const ListMessagesResponse = zod.array(ListMessagesResponseItem);
-
-/**
- * @summary Send a message in a conversation
+ * @summary Send a message via Lambda to a WhatsApp number
  */
 export const SendMessageParams = zod.object({
-  id: zod.coerce.number(),
+  id: zod.coerce.string(),
 });
 
 export const SendMessageBody = zod.object({

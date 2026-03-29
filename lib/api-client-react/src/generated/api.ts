@@ -825,101 +825,14 @@ export function useGetConversation<
 }
 
 /**
- * @summary List messages in a conversation
+ * @summary Send a message via Lambda to a WhatsApp number
  */
-export const getListMessagesUrl = (id: number) => {
-  return `/api/conversations/${id}/messages`;
-};
-
-export const listMessages = async (
-  id: number,
-  options?: RequestInit,
-): Promise<Message[]> => {
-  return customFetch<Message[]>(getListMessagesUrl(id), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getListMessagesQueryKey = (id: number) => {
-  return [`/api/conversations/${id}/messages`] as const;
-};
-
-export const getListMessagesQueryOptions = <
-  TData = Awaited<ReturnType<typeof listMessages>>,
-  TError = ErrorType<unknown>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listMessages>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getListMessagesQueryKey(id);
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof listMessages>>> = ({
-    signal,
-  }) => listMessages(id, { signal, ...requestOptions });
-
-  return {
-    queryKey,
-    queryFn,
-    enabled: !!id,
-    ...queryOptions,
-  } as UseQueryOptions<
-    Awaited<ReturnType<typeof listMessages>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type ListMessagesQueryResult = NonNullable<
-  Awaited<ReturnType<typeof listMessages>>
->;
-export type ListMessagesQueryError = ErrorType<unknown>;
-
-/**
- * @summary List messages in a conversation
- */
-
-export function useListMessages<
-  TData = Awaited<ReturnType<typeof listMessages>>,
-  TError = ErrorType<unknown>,
->(
-  id: number,
-  options?: {
-    query?: UseQueryOptions<
-      Awaited<ReturnType<typeof listMessages>>,
-      TError,
-      TData
-    >;
-    request?: SecondParameter<typeof customFetch>;
-  },
-): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListMessagesQueryOptions(id, options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * @summary Send a message in a conversation
- */
-export const getSendMessageUrl = (id: number) => {
+export const getSendMessageUrl = (id: string) => {
   return `/api/conversations/${id}/messages`;
 };
 
 export const sendMessage = async (
-  id: number,
+  id: string,
   sendMessageRequest: SendMessageRequest,
   options?: RequestInit,
 ): Promise<Message> => {
@@ -938,14 +851,14 @@ export const getSendMessageMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof sendMessage>>,
     TError,
-    { id: number; data: BodyType<SendMessageRequest> },
+    { id: string; data: BodyType<SendMessageRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof sendMessage>>,
   TError,
-  { id: number; data: BodyType<SendMessageRequest> },
+  { id: string; data: BodyType<SendMessageRequest> },
   TContext
 > => {
   const mutationKey = ["sendMessage"];
@@ -959,7 +872,7 @@ export const getSendMessageMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof sendMessage>>,
-    { id: number; data: BodyType<SendMessageRequest> }
+    { id: string; data: BodyType<SendMessageRequest> }
   > = (props) => {
     const { id, data } = props ?? {};
 
@@ -976,7 +889,7 @@ export type SendMessageMutationBody = BodyType<SendMessageRequest>;
 export type SendMessageMutationError = ErrorType<unknown>;
 
 /**
- * @summary Send a message in a conversation
+ * @summary Send a message via Lambda to a WhatsApp number
  */
 export const useSendMessage = <
   TError = ErrorType<unknown>,
@@ -985,14 +898,14 @@ export const useSendMessage = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof sendMessage>>,
     TError,
-    { id: number; data: BodyType<SendMessageRequest> },
+    { id: string; data: BodyType<SendMessageRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof sendMessage>>,
   TError,
-  { id: number; data: BodyType<SendMessageRequest> },
+  { id: string; data: BodyType<SendMessageRequest> },
   TContext
 > => {
   return useMutation(getSendMessageMutationOptions(options));

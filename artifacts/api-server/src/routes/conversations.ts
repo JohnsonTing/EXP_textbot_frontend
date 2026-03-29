@@ -118,4 +118,52 @@ router.get("/conversations/:phone", async (req, res) => {
   }
 });
 
+const LAMBDA_SEND_URL = "https://td2uwxvitefh7dx7fhjugasb0csqrt.lambda-url.us-east-1.on.aws/send";
+
+router.post("/conversations/:phone/messages", async (req, res) => {
+  try {
+    const phone = decodeURIComponent(req.params.phone);
+    const { content } = req.body as { content?: string };
+
+    if (!content || typeof content !== "string" || !content.trim()) {
+      res.status(400).json({ error: "content is required" });
+      return;
+    }
+
+    const lambdaRes = await fetch(LAMBDA_SEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, message: content.trim() }),
+    });
+
+    const responseText = await lambdaRes.text();
+    req.log.info({ status: lambdaRes.status, body: responseText }, "Lambda send response");
+
+    if (!lambdaRes.ok) {
+      req.log.error({ status: lambdaRes.status, body: responseText }, "Lambda returned error");
+      // 403 from the Lambda means the number isn't registered in the WhatsApp system
+      const userMessage =
+        lambdaRes.status === 403
+          ? "This number is not registered as a WhatsApp contact"
+          : "Failed to send message";
+      res.status(lambdaRes.status === 403 ? 403 : 502).json({ error: userMessage, detail: responseText });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    res.status(201).json({
+      id: `local-${Date.now()}`,
+      conversationId: phone,
+      direction: "outbound",
+      role: "user",
+      content: content.trim(),
+      senderName: "Agent",
+      sentAt: now,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to send message");
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
 export default router;

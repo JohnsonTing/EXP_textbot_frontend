@@ -166,12 +166,18 @@ importers:
 
   artifacts/api-server:
     dependencies:
+      '@aws-crypto/sha256-js':
+        specifier: ^5.2.0
+        version: 5.2.0
       '@aws-sdk/client-dynamodb':
         specifier: ^3.1014.0
         version: 3.1014.0
       '@aws-sdk/lib-dynamodb':
         specifier: ^3.1014.0
         version: 3.1014.0(@aws-sdk/client-dynamodb@3.1014.0)
+      '@smithy/signature-v4':
+        specifier: ^5.0.0
+        version: 5.3.12
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod

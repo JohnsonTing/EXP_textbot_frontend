@@ -196,35 +196,16 @@ paths:
           description: Not found
 
   /conversations/{id}/messages:
-    get:
-      operationId: listMessages
-      tags: [messages]
-      summary: List messages in a conversation
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: List of messages
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Message"
     post:
       operationId: sendMessage
       tags: [messages]
-      summary: Send a message in a conversation
+      summary: Send a message via Lambda to a WhatsApp number
       parameters:
         - name: id
           in: path
           required: true
           schema:
-            type: integer
+            type: string
       requestBody:
         required: true
         content:

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useListConversations, useGetConversation } from "@workspace/api-client-react";
+import { useListConversations, useGetConversation, useSendMessage } from "@workspace/api-client-react";
 import { Send, Phone, User, Search, MessageCircle, MoreVertical, MessageSquare } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
@@ -33,8 +33,19 @@ export default function Conversations() {
     { query: { enabled: !!activePhone } }
   );
 
+  const sendMessageMutation = useSendMessage();
+
   const [messageText, setMessageText] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [optimisticMessages, setOptimisticMessages] = useState<
+    { id: string; direction: string; content: string; sentAt: string; role: string; senderName: string; conversationId: string }[]
+  >([]);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
+
+  // Reset optimistic messages when switching conversations
+  useEffect(() => {
+    setOptimisticMessages([]);
+  }, [activePhone]);
 
   useEffect(() => {
     if (conversations.length > 0 && !activePhone) {
@@ -42,12 +53,45 @@ export default function Conversations() {
     }
   }, [conversations, activePhone]);
 
+  const allMessages = [...(activeConversation?.messages ?? []), ...optimisticMessages];
+
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeConversation?.messages]);
+  }, [allMessages.length]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!messageText.trim() || !activePhone) return;
+
+    const text = messageText.trim();
+    setMessageText("");
+
+    // Optimistically show the message immediately
+    const optimistic = {
+      id: `optimistic-${Date.now()}`,
+      conversationId: activePhone,
+      direction: "outbound",
+      role: "user",
+      content: text,
+      senderName: "Agent",
+      sentAt: new Date().toISOString(),
+    };
+    setOptimisticMessages((prev) => [...prev, optimistic]);
+
+    setSendError(null);
+    sendMessageMutation.mutate(
+      { id: encodeURIComponent(activePhone), data: { content: text } },
+      {
+        onError: (err: unknown) => {
+          setOptimisticMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
+          setMessageText(text);
+          const msg =
+            err instanceof Error ? err.message : "Failed to send message. Please try again.";
+          setSendError(msg);
+          setTimeout(() => setSendError(null), 5000);
+        },
+      }
+    );
   };
 
   const getChannelIcon = (channel: string) => {
@@ -200,7 +244,7 @@ export default function Conversations() {
                     </span>
                   </div>
 
-                  {activeConversation.messages.map((msg) => {
+                  {allMessages.map((msg) => {
                     const isOutbound = msg.direction === "outbound";
                     return (
                       <div key={msg.id} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
@@ -235,8 +279,13 @@ export default function Conversations() {
                   <div ref={endOfMessagesRef} />
                 </div>
 
-                {/* Input Area - read-only note since messages come from DynamoDB AI system */}
+                {/* Input Area */}
                 <div className="p-4 bg-card border-t border-border/50">
+                  {sendError && (
+                    <div className="mb-3 px-4 py-2 bg-destructive/10 text-destructive text-sm rounded-xl border border-destructive/20 max-w-4xl mx-auto">
+                      {sendError}
+                    </div>
+                  )}
                   <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
                     <div className="flex-1 relative bg-muted/30 rounded-2xl border border-border/50 focus-within:border-primary/50 focus-within:bg-card focus-within:shadow-md transition-all duration-200">
                       <textarea
@@ -255,10 +304,14 @@ export default function Conversations() {
                     </div>
                     <Button
                       type="submit"
-                      disabled={!messageText.trim()}
+                      disabled={!messageText.trim() || sendMessageMutation.isPending}
                       className="rounded-2xl h-12 w-12 p-0 flex items-center justify-center shrink-0 shadow-lg shadow-primary/25 hover:-translate-y-0.5 transition-all duration-200"
                     >
-                      <Send size={20} className="ml-1" />
+                      {sendMessageMutation.isPending ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Send size={20} className="ml-1" />
+                      )}
                     </Button>
                   </form>
                 </div>
