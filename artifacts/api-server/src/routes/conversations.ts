@@ -156,7 +156,6 @@ router.post("/conversations/:phone/messages", async (req, res) => {
 
     const lambdaRes = await fetch(LAMBDA_SEND_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: lambdaPayload,
     });
 
