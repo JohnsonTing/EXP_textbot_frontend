@@ -146,7 +146,7 @@ router.post("/conversations/:phone/messages", async (req, res) => {
       return;
     }
 
-    const lambdaPayload = JSON.stringify({ phone, message: content.trim() });
+    const lambdaPayload = JSON.stringify({ body: { phone, message: content.trim() } });
     req.log.info(
       { url: LAMBDA_SEND_URL, payload: lambdaPayload },
       "Sending to Lambda",
