@@ -147,7 +147,8 @@ router.post("/conversations/:phone/messages", async (req, res) => {
     }
 
     const lambdaPayload = JSON.stringify({
-      body: { phone, message: content.trim() },
+      phone: `${phone}`,
+      message: content.trim(),
     });
     req.log.info(
       { url: LAMBDA_SEND_URL, payload: lambdaPayload },
@@ -156,6 +157,7 @@ router.post("/conversations/:phone/messages", async (req, res) => {
 
     const lambdaRes = await fetch(LAMBDA_SEND_URL, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: lambdaPayload,
     });
 
