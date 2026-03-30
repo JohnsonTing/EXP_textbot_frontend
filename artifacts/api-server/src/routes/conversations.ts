@@ -1,16 +1,25 @@
 import { Router, type IRouter } from "express";
-import { scanAllConversationsByPhone, getMessagesByPhone, scanCustomers, type DynamoMessage } from "../lib/dynamodb";
+import {
+  scanAllConversationsByPhone,
+  getMessagesByPhone,
+  scanCustomers,
+  type DynamoMessage,
+} from "../lib/dynamodb";
 
 const router: IRouter = Router();
 
 function buildConversationList(
   grouped: Record<string, DynamoMessage[]>,
-  customers: Record<string, { name: string; phone: string; customerId: string }>
+  customers: Record<
+    string,
+    { name: string; phone: string; customerId: string }
+  >,
 ) {
   return Object.entries(grouped)
     .map(([phone, messages]) => {
       const sorted = [...messages].sort(
-        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        (a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
       );
       const last = sorted[sorted.length - 1];
       const customer = customers[phone];
@@ -44,11 +53,15 @@ router.get("/conversations", async (req, res) => {
       scanCustomers(),
     ]);
 
-    const customersByPhone: Record<string, { name: string; phone: string; customerId: string }> = {};
+    const customersByPhone: Record<
+      string,
+      { name: string; phone: string; customerId: string }
+    > = {};
     for (const c of allCustomers) {
       const ph = c.phone || c.customer_id;
       if (ph) {
-        const name = c.contact_name && c.contact_name.trim() ? c.contact_name.trim() : ph;
+        const name =
+          c.contact_name && c.contact_name.trim() ? c.contact_name.trim() : ph;
         customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id };
       }
     }
@@ -61,7 +74,7 @@ router.get("/conversations", async (req, res) => {
         (r) =>
           r.contactName.toLowerCase().includes(q) ||
           r.contactPhone.includes(q) ||
-          (r.lastMessage ?? "").toLowerCase().includes(q)
+          (r.lastMessage ?? "").toLowerCase().includes(q),
       );
     }
 
@@ -84,7 +97,8 @@ router.get("/conversations/:phone", async (req, res) => {
     const customer = allCustomers.find((c) => c.phone === phone);
 
     const sorted = [...messages].sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      (a, b) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
 
     const mappedMessages = sorted.map((m) => ({
@@ -93,7 +107,8 @@ router.get("/conversations/:phone", async (req, res) => {
       direction: m.role === "user" ? "inbound" : "outbound",
       content: m.message,
       role: m.role,
-      senderName: m.role === "user" ? (customer?.contact_name ?? phone) : "Assistant",
+      senderName:
+        m.role === "user" ? (customer?.contact_name ?? phone) : "Assistant",
       sentAt: m.timestamp,
     }));
 
@@ -118,7 +133,8 @@ router.get("/conversations/:phone", async (req, res) => {
   }
 });
 
-const LAMBDA_SEND_URL = "https://td2uwxvitefh7dx7fhjugasb0csqrt.lambda-url.us-east-1.on.aws/send";
+const LAMBDA_SEND_URL =
+  "https://td2uwxvitefh7dx7fhjugasb0csqrt.lambda-url.us-east-1.on.aws/send";
 
 router.post("/conversations/:phone/messages", async (req, res) => {
   try {
@@ -130,23 +146,37 @@ router.post("/conversations/:phone/messages", async (req, res) => {
       return;
     }
 
+    const lambdaPayload = JSON.stringify({ phone, message: content.trim() });
+    req.log.info(
+      { url: LAMBDA_SEND_URL, payload: lambdaPayload },
+      "Sending to Lambda",
+    );
+
     const lambdaRes = await fetch(LAMBDA_SEND_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, message: content.trim() }),
+      body: lambdaPayload,
     });
 
     const responseText = await lambdaRes.text();
-    req.log.info({ status: lambdaRes.status, body: responseText }, "Lambda send response");
+    req.log.info(
+      { status: lambdaRes.status, body: responseText },
+      "Lambda send response",
+    );
 
     if (!lambdaRes.ok) {
-      req.log.error({ status: lambdaRes.status, body: responseText }, "Lambda returned error");
+      req.log.error(
+        { status: lambdaRes.status, body: responseText },
+        "Lambda returned error",
+      );
       // 403 from the Lambda means the number isn't registered in the WhatsApp system
       const userMessage =
         lambdaRes.status === 403
           ? "This number is not registered as a WhatsApp contact"
           : "Failed to send message";
-      res.status(lambdaRes.status === 403 ? 403 : 502).json({ error: userMessage, detail: responseText });
+      res
+        .status(lambdaRes.status === 403 ? 403 : 502)
+        .json({ error: userMessage, detail: responseText });
       return;
     }
 
