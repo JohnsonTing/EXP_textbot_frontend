@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
-import { db, contactsTable, conversationsTable, messagesTable } from "@workspace/db";
-import { eq, gte, sql, count } from "drizzle-orm";
+import { gte, sql, count } from "drizzle-orm";
 
 const router: IRouter = Router();
 
 router.get("/dashboard/metrics", async (req, res) => {
   try {
+    const { db, contactsTable, conversationsTable, messagesTable } = await import("@workspace/db");
+
     const [contactStats] = await db
       .select({
         total: count(),

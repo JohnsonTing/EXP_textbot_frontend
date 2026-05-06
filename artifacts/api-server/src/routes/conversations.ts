@@ -134,7 +134,7 @@ router.get("/conversations/:phone", async (req, res) => {
 });
 
 const LAMBDA_SEND_URL =
-  "https://td2uwxvitefh7dx7fhjug6iahi0csqrt.lambda-url.us-east-1.on.aws/send";
+  "https://jpdrrnrnot2pslmpq4vcxatsey0ofvud.lambda-url.us-east-1.on.aws/send";
 
 router.post("/conversations/:phone/messages", async (req, res) => {
   try {
@@ -157,7 +157,7 @@ router.post("/conversations/:phone/messages", async (req, res) => {
 
     const lambdaRes = await fetch(LAMBDA_SEND_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      //headers: { "Content-Type": "application/json" },
       body: lambdaPayload,
     });
 
