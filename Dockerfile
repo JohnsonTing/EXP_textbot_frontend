@@ -11,7 +11,7 @@ COPY tsconfig.json tsconfig.base.json ./
 # Copy all source
 COPY lib ./lib
 COPY artifacts ./artifacts
-COPY scripts ./scripts 2>/dev/null || true
+COPY scripts ./scripts
 
 # Install deps
 RUN pnpm install --no-frozen-lockfile
