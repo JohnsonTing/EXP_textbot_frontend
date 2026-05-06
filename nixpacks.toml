@@ -1,0 +1,8 @@
+[phases.install]
+cmds = ['pnpm install --no-frozen-lockfile']
+
+[phases.build]
+cmds = ['NODE_ENV=production BASE_PATH=/ pnpm --filter estate-agent build && pnpm --filter api-server build']
+
+[start]
+cmd = 'NODE_ENV=production node --enable-source-maps artifacts/api-server/dist/index.mjs'
