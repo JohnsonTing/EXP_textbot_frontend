@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useSearch } from "wouter";
 import { useListConversations, useGetConversation, useSendMessage } from "@workspace/api-client-react";
 import { Send, Phone, User, Search, MessageCircle, MoreVertical, MessageSquare } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -21,6 +22,9 @@ function Mail(props: React.SVGProps<SVGSVGElement>) {
 export default function Conversations() {
   const [search, setSearch] = useState("");
   const [activePhone, setActivePhone] = useState<string | null>(null);
+
+  const searchString = useSearch();
+  const phoneParam = useMemo(() => new URLSearchParams(searchString).get("phone"), [searchString]);
 
   const { data: conversations = [], isLoading: isLoadingConversations } = useListConversations({
     search: search || undefined,
@@ -48,10 +52,12 @@ export default function Conversations() {
   }, [activePhone]);
 
   useEffect(() => {
-    if (conversations.length > 0 && !activePhone) {
+    if (phoneParam) {
+      setActivePhone(phoneParam);
+    } else if (conversations.length > 0 && !activePhone) {
       setActivePhone(conversations[0].id);
     }
-  }, [conversations, activePhone]);
+  }, [conversations, phoneParam]);
 
   const allMessages = [...(activeConversation?.messages ?? []), ...optimisticMessages];
 

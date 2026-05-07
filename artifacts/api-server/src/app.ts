@@ -1,8 +1,11 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import path from "path";
 import router from "./routes";
+import authRouter from "./routes/auth";
+import { authMiddleware } from "./middlewares/authMiddleware";
 import { logger } from "./lib/logger";
 
 const app: Express = express();
@@ -26,11 +29,16 @@ app.use(
     },
   }),
 );
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
+// Auth routes unprotected
+app.use("/api", authRouter);
+
+// All other API routes require valid session
+app.use("/api", authMiddleware, router);
 
 if (process.env.NODE_ENV === "production") {
   const staticPath = path.resolve(__dirname, "../../estate-agent/dist/public");

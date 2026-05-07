@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand, UpdateComm
 const REGION = process.env.AWS_REGION || "us-east-1";
 export const CUSTOMERS_TABLE = "Customers";
 export const CONVERSATIONS_TABLE = "Conversations";
+export const USERS_TABLE = "EXP_agents";
 
 function createClient() {
   const client = new DynamoDBClient({
@@ -159,6 +160,35 @@ export async function getMessagesByPhone(phoneNumber: string): Promise<DynamoMes
     lastKey = result.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (lastKey);
   return messages;
+}
+
+export interface DynamoAgent {
+  email: string;
+  agent_id: string;
+  password_hash: string;
+  name: string;
+  phone?: string;
+  role: "agent" | "admin";
+  created_at: string;
+}
+
+export async function getAgent(email: string): Promise<DynamoAgent | null> {
+  const client = getDynamoClient();
+  const resp = await client.send(
+    new GetCommand({ TableName: USERS_TABLE, Key: { email } })
+  );
+  return (resp.Item as DynamoAgent) ?? null;
+}
+
+export async function putAgent(item: DynamoAgent): Promise<void> {
+  const client = getDynamoClient();
+  await client.send(new PutCommand({ TableName: USERS_TABLE, Item: item }));
+}
+
+export async function listAgents(): Promise<DynamoAgent[]> {
+  const client = getDynamoClient();
+  const resp = await client.send(new ScanCommand({ TableName: USERS_TABLE }));
+  return (resp.Items ?? []) as DynamoAgent[];
 }
 
 export function mapDynamoToContact(c: DynamoCustomer) {

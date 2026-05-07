@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { v4 as uuidv4 } from "uuid";
 import {
   scanCustomers,
   getCustomer,
@@ -47,7 +46,7 @@ router.post("/contacts", async (req, res) => {
     const body = req.body;
     const now = new Date().toISOString();
     const item: DynamoCustomer = {
-      customer_id: uuidv4(),
+      customer_id: body.phone,
       contact_name: body.name,
       email: body.email ?? undefined,
       phone: body.phone,

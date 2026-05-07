@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useListContacts, useCreateContact, useUpdateContact, useDeleteContact } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { format } from "date-fns";
-import { Search, Plus, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, MapPin, Building2, ExternalLink, Users } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, MapPin, Building2, ExternalLink, Users, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -32,9 +35,14 @@ export default function Contacts() {
   const [search, setSearch] = useState("");
   const [intentFilter, setIntentFilter] = useState<string>("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<{ id: string; name: string; phone: string; email?: string | null; leadIntent?: string | null; propertyInMind?: string | null; bedrooms?: number | null; budget?: string | null; tags: string[] } | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
+  const [, setLocation] = useLocation();
+
   const queryClient = useQueryClient();
-  
+
   const { data: contacts = [], isLoading } = useListContacts({
     search: search || undefined,
     leadIntent: intentFilter || undefined
@@ -46,6 +54,26 @@ export default function Contacts() {
         queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
         setIsDialogOpen(false);
         form.reset();
+      }
+    }
+  });
+
+  const updateContact = useUpdateContact({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
+        setIsEditDialogOpen(false);
+        setEditingContact(null);
+      }
+    }
+  });
+
+  const deleteContact = useDeleteContact({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
+        setIsDeleteDialogOpen(false);
+        setDeletingContactId(null);
       }
     }
   });
@@ -63,12 +91,48 @@ export default function Contacts() {
     }
   });
 
+  const editForm = useForm<ContactFormData>({
+    resolver: zodResolver(contactSchema),
+    defaultValues: {
+      name: "",
+      phone: "",
+      email: "",
+      leadIntent: "",
+      propertyInMind: "",
+      budget: "",
+      tags: [],
+    }
+  });
+
+  useEffect(() => {
+    if (editingContact) {
+      editForm.reset({
+        name: editingContact.name,
+        phone: editingContact.phone,
+        email: editingContact.email || "",
+        leadIntent: editingContact.leadIntent || "",
+        propertyInMind: editingContact.propertyInMind || "",
+        bedrooms: editingContact.bedrooms ?? undefined,
+        budget: editingContact.budget || "",
+        tags: editingContact.tags.join(", ") as unknown as string[],
+      });
+    }
+  }, [editingContact]);
+
   const onSubmit = (data: ContactFormData) => {
     createContact.mutate({
       data: {
         ...data,
         tags: data.tags || []
       }
+    });
+  };
+
+  const onEditSubmit = (data: ContactFormData) => {
+    if (!editingContact) return;
+    updateContact.mutate({
+      id: editingContact.id,
+      data: { ...data, tags: data.tags || [] }
     });
   };
 
@@ -284,9 +348,43 @@ export default function Contacts() {
                         {format(new Date(contact.createdAt), "MMM d, yyyy")}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button variant="ghost" size="icon" className="rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreHorizontal size={18} />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreHorizontal size={18} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer"
+                              onClick={() => {
+                                setEditingContact(contact);
+                                setIsEditDialogOpen(true);
+                              }}
+                            >
+                              <Pencil size={14} />
+                              Edit Contact
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer"
+                              onClick={() => setLocation(`/?phone=${encodeURIComponent(contact.phone)}`)}
+                            >
+                              <MessageCircle size={14} />
+                              Message
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                              onClick={() => {
+                                setDeletingContactId(contact.id);
+                                setIsDeleteDialogOpen(true);
+                              }}
+                            >
+                              <Trash2 size={14} />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))
@@ -296,6 +394,92 @@ export default function Contacts() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={(open) => { setIsDeleteDialogOpen(open); if (!open) setDeletingContactId(null); }}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Contact</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the contact and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deletingContactId) {
+                  deleteContact.mutate({ id: deletingContactId as unknown as number });
+                }
+              }}
+            >
+              {deleteContact.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Contact Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => { setIsEditDialogOpen(open); if (!open) setEditingContact(null); }}>
+        <DialogContent className="sm:max-w-[500px] rounded-2xl border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-display">Edit Contact</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Name *</label>
+                <Input {...editForm.register("name")} className="rounded-lg" placeholder="John Doe" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Phone *</label>
+                <Input {...editForm.register("phone")} className="rounded-lg" placeholder="+44 7000 000000" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email</label>
+                <Input {...editForm.register("email")} type="email" className="rounded-lg" placeholder="john@example.com" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Lead Intent</label>
+                <select {...editForm.register("leadIntent")} className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="">Select Intent</option>
+                  <option value="buyer">Buyer</option>
+                  <option value="renter">Renter</option>
+                  <option value="vendor">Vendor</option>
+                  <option value="landlord">Landlord</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Bedrooms</label>
+                <Input {...editForm.register("bedrooms")} type="number" className="rounded-lg" placeholder="3" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Budget</label>
+                <Input {...editForm.register("budget")} className="rounded-lg" placeholder="£500k" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Tags (comma separated)</label>
+              <Input {...editForm.register("tags")} className="rounded-lg" placeholder="hot lead, central london, family" />
+            </div>
+
+            <div className="pt-4 flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="rounded-xl">Cancel</Button>
+              <Button type="submit" disabled={updateContact.isPending} className="rounded-xl">
+                {updateContact.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
