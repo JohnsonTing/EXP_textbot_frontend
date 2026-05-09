@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useListContacts, useCreateContact, useUpdateContact, useDeleteContact } from "@workspace/api-client-react";
+import type { Contact } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { format } from "date-fns";
-import { Search, Plus, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, MapPin, Building2, ExternalLink, Users } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, MapPin, Building2, ExternalLink, Users, Pencil, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -32,8 +34,11 @@ export default function Contacts() {
   const [search, setSearch] = useState("");
   const [intentFilter, setIntentFilter] = useState<string>("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
+  const [editContact, setEditContact] = useState<Contact | null>(null);
+  const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
+
   const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
   
   const { data: contacts = [], isLoading } = useListContacts({
     search: search || undefined,
@@ -42,33 +47,50 @@ export default function Contacts() {
 
   const createContact = useCreateContact({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
-        setIsDialogOpen(false);
-        form.reset();
-      }
+      onSuccess: () => { invalidate(); setIsDialogOpen(false); form.reset(); }
+    }
+  });
+
+  const updateContact = useUpdateContact({
+    mutation: {
+      onSuccess: () => { invalidate(); setEditContact(null); editForm.reset(); }
+    }
+  });
+
+  const deleteContactMutation = useDeleteContact({
+    mutation: {
+      onSuccess: () => { invalidate(); setDeleteContact(null); }
     }
   });
 
   const form = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
-    defaultValues: {
-      name: "",
-      phone: "",
-      email: "",
-      leadIntent: "",
-      propertyInMind: "",
-      budget: "",
-      tags: [],
-    }
+    defaultValues: { name: "", phone: "", email: "", leadIntent: "", propertyInMind: "", budget: "", tags: [] }
+  });
+
+  const editForm = useForm<ContactFormData>({
+    resolver: zodResolver(contactSchema),
   });
 
   const onSubmit = (data: ContactFormData) => {
-    createContact.mutate({
-      data: {
-        ...data,
-        tags: data.tags || []
-      }
+    createContact.mutate({ data: { ...data, tags: data.tags || [] } });
+  };
+
+  const onEditSubmit = (data: ContactFormData) => {
+    if (!editContact) return;
+    updateContact.mutate({ id: encodeURIComponent(editContact.id), data: { ...data, tags: data.tags || [] } });
+  };
+
+  const openEdit = (contact: Contact) => {
+    setEditContact(contact);
+    editForm.reset({
+      name: contact.name,
+      phone: contact.phone,
+      email: contact.email ?? "",
+      leadIntent: contact.leadIntent ?? "",
+      propertyInMind: contact.propertyInMind ?? "",
+      budget: contact.budget ?? "",
+      tags: contact.tags as unknown as string[],
     });
   };
 
@@ -189,7 +211,7 @@ export default function Contacts() {
                   <th className="px-6 py-4">Contact</th>
                   <th className="px-6 py-4">Contact Info</th>
                   <th className="px-6 py-4">Requirements</th>
-                  <th className="px-6 py-4">Intent & Tags</th>
+                  <th className="px-6 py-4">Buyer / Tenant</th>
                   <th className="px-6 py-4">Created On</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
@@ -267,11 +289,15 @@ export default function Contacts() {
                         )}
                       </td>
                       <td className="px-6 py-4 space-y-2">
-                        {contact.leadIntent && (
+                        {(contact as any).customerType ? (
+                          <Badge variant="secondary" className={`capitalize rounded-full ${getIntentColor((contact as any).customerType)} border-none shadow-sm`}>
+                            {(contact as any).customerType}
+                          </Badge>
+                        ) : contact.leadIntent ? (
                           <Badge variant="secondary" className={`capitalize rounded-full ${getIntentColor(contact.leadIntent)} border-none shadow-sm`}>
                             {contact.leadIntent}
                           </Badge>
-                        )}
+                        ) : null}
                         <div className="flex flex-wrap gap-1 mt-1">
                           {contact.tags.map((tag, idx) => (
                             <span key={idx} className="text-[10px] px-2 py-0.5 bg-muted text-muted-foreground rounded border border-border/50">
@@ -284,9 +310,22 @@ export default function Contacts() {
                         {format(new Date(contact.createdAt), "MMM d, yyyy")}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <Button variant="ghost" size="icon" className="rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreHorizontal size={18} />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreHorizontal size={18} />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem className="gap-2 cursor-pointer" onSelect={() => openEdit(contact)}>
+                              <Pencil size={14} /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="gap-2 cursor-pointer text-destructive focus:text-destructive" onSelect={() => setDeleteContact(contact)}>
+                              <Trash2 size={14} /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))
@@ -296,6 +335,85 @@ export default function Contacts() {
           </div>
         </div>
       </div>
+      {/* Edit Dialog */}
+      <Dialog open={!!editContact} onOpenChange={(o) => { if (!o) setEditContact(null); }}>
+        <DialogContent className="sm:max-w-[500px] rounded-2xl border-border bg-card">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-display">Edit Contact</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Name *</label>
+                <Input {...editForm.register("name")} className="rounded-lg" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Phone *</label>
+                <Input {...editForm.register("phone")} className="rounded-lg" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Email</label>
+                <Input {...editForm.register("email")} type="email" className="rounded-lg" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Lead Intent</label>
+                <select {...editForm.register("leadIntent")} className="w-full h-10 px-3 rounded-lg border border-input bg-background text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="">Select Intent</option>
+                  <option value="buyer">Buyer</option>
+                  <option value="renter">Renter</option>
+                  <option value="vendor">Vendor</option>
+                  <option value="landlord">Landlord</option>
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Bedrooms</label>
+                <Input {...editForm.register("bedrooms")} type="number" className="rounded-lg" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Budget</label>
+                <Input {...editForm.register("budget")} className="rounded-lg" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Tags (comma separated)</label>
+              <Input {...editForm.register("tags")} className="rounded-lg" />
+            </div>
+            <div className="pt-4 flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setEditContact(null)} className="rounded-xl">Cancel</Button>
+              <Button type="submit" disabled={updateContact.isPending} className="rounded-xl">
+                {updateContact.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteContact} onOpenChange={(o) => { if (!o) setDeleteContact(null); }}>
+        <DialogContent className="sm:max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Delete contact?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently delete <span className="font-medium text-foreground">{deleteContact?.name}</span>. This cannot be undone.
+          </p>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button variant="outline" onClick={() => setDeleteContact(null)} className="rounded-xl">Cancel</Button>
+            <Button
+              variant="destructive"
+              className="rounded-xl"
+              disabled={deleteContactMutation.isPending}
+              onClick={() => deleteContact && deleteContactMutation.mutate({ id: encodeURIComponent(deleteContact.id) })}
+            >
+              {deleteContactMutation.isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

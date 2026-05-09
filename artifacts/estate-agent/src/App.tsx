@@ -3,8 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
+import Login from "@/pages/login";
+import { useAuth } from "@/hooks/useAuth";
 
-// Page Imports
 import Conversations from "./pages/conversations";
 import Contacts from "./pages/contacts";
 import Dashboard from "./pages/dashboard";
@@ -29,12 +30,30 @@ function Router() {
   );
 }
 
+function AuthGate() {
+  const { user, loading, logout } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login onLogin={() => window.location.reload()} />;
+  }
+
+  return <Router />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
+          <AuthGate />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

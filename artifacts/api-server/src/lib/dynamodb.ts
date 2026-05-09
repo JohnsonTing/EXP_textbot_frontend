@@ -4,6 +4,7 @@ import { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand, UpdateComm
 const REGION = process.env.AWS_REGION || "us-east-1";
 export const CUSTOMERS_TABLE = "Customers";
 export const CONVERSATIONS_TABLE = "Conversations";
+export const AGENTS_TABLE = "EXP_agents";
 
 function createClient() {
   const client = new DynamoDBClient({
@@ -32,7 +33,11 @@ export interface DynamoCustomer {
   enquiry_postcode?: string;
   enquiry_prop_type?: string;
   lead_intent?: string;
+  customer_type?: string;
+  bot_paused?: boolean;
   property_in_mind?: string;
+  responsible_agent_email?: string;
+  responsible_agent_id?: string;
   scraped_listings?: string;
   status?: string;
   summary?: string;
@@ -111,6 +116,26 @@ export async function deleteCustomer(customerId: string): Promise<void> {
   await client.send(new DeleteCommand({ TableName: CUSTOMERS_TABLE, Key: { customer_id: customerId } }));
 }
 
+export interface DynamoAgent {
+  email: string;
+  name: string;
+  phone?: string;
+  role: string;
+  created_at?: string;
+}
+
+export async function getAgentByEmail(email: string): Promise<DynamoAgent | null> {
+  const client = getDynamoClient();
+  const resp = await client.send(new GetCommand({ TableName: AGENTS_TABLE, Key: { email } }));
+  return (resp.Item as DynamoAgent) ?? null;
+}
+
+export async function getFirstAgent(): Promise<DynamoAgent | null> {
+  const client = getDynamoClient();
+  const resp = await client.send(new ScanCommand({ TableName: AGENTS_TABLE, Limit: 1 }));
+  return ((resp.Items?.[0]) as DynamoAgent) ?? null;
+}
+
 function nonEmpty(val: string | undefined | null): string | null {
   if (!val || val.trim() === "") return null;
   return val;
@@ -171,6 +196,7 @@ export function mapDynamoToContact(c: DynamoCustomer) {
     phone,
     tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
     leadIntent: nonEmpty(c.lead_intent),
+    customerType: nonEmpty(c.customer_type),
     summary: nonEmpty(c.summary),
     propertyInMind: nonEmpty(c.property_in_mind),
     bedrooms: c.enquiry_bedrooms && c.enquiry_bedrooms > 0 ? c.enquiry_bedrooms : null,
@@ -179,6 +205,8 @@ export function mapDynamoToContact(c: DynamoCustomer) {
     enquiryPropType: nonEmpty(c.enquiry_prop_type),
     status: nonEmpty(c.status),
     scrapedListings: nonEmpty(c.scraped_listings),
+    responsibleAgentEmail: nonEmpty(c.responsible_agent_email),
+    responsibleAgentId: nonEmpty(c.responsible_agent_id),
     createdAt: nonEmpty(c.created_at) ?? new Date().toISOString(),
     updatedAt: nonEmpty(c.updated_at) ?? new Date().toISOString(),
   };

@@ -15,6 +15,8 @@ export interface Contact {
   tags: string[];
   /** buyer, renter, landlord, vendor, investment, home buyer */
   leadIntent?: string | null;
+  /** buyer or renter */
+  customerType?: string | null;
   /** Summary of what the prospect is looking for */
   summary?: string | null;
   /** URL or description of property in mind */

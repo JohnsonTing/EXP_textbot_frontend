@@ -3,6 +3,8 @@ import {
   scanAllConversationsByPhone,
   getMessagesByPhone,
   scanCustomers,
+  updateCustomer,
+  putCustomer,
   type DynamoMessage,
 } from "../lib/dynamodb";
 
@@ -121,6 +123,7 @@ router.get("/conversations/:phone", async (req, res) => {
       contactPhone: phone,
       channel: "whatsapp",
       status: "active",
+      botPaused: customer?.bot_paused ?? false,
       lastMessage: last?.message ?? null,
       lastMessageAt: last?.timestamp ?? null,
       unreadCount: 0,
@@ -130,6 +133,43 @@ router.get("/conversations/:phone", async (req, res) => {
   } catch (err) {
     req.log.error({ err }, "Failed to get conversation from DynamoDB");
     res.status(500).json({ error: "Failed to get conversation" });
+  }
+});
+
+const findCustomerByPhone = (customers: Awaited<ReturnType<typeof scanCustomers>>, phone: string) =>
+  customers.find((c) => c.phone === phone || c.customer_id === phone);
+
+router.get("/conversations/:phone/bot-status", async (req, res) => {
+  try {
+    const phone = decodeURIComponent(req.params.phone);
+    const customer = findCustomerByPhone(await scanCustomers(), phone);
+    if (!customer) {
+      res.status(404).json({ error: "Customer not found" });
+      return;
+    }
+    res.json({ phone, botPaused: customer.bot_paused ?? false });
+  } catch (err) {
+    req.log.error({ err }, "Failed to get bot status");
+    res.status(500).json({ error: "Failed to get bot status" });
+  }
+});
+
+router.patch("/conversations/:phone/bot-mode", async (req, res) => {
+  try {
+    const phone = decodeURIComponent(req.params.phone);
+    const { paused } = req.body as { paused: boolean };
+
+    let customer = findCustomerByPhone(await scanCustomers(), phone);
+    if (!customer) {
+      const now = new Date().toISOString();
+      await putCustomer({ customer_id: phone, phone, created_at: now, updated_at: now, bot_paused: paused });
+    } else {
+      await updateCustomer(customer.customer_id, { bot_paused: paused });
+    }
+    res.json({ botPaused: paused });
+  } catch (err) {
+    req.log.error({ err }, "Failed to toggle bot mode");
+    res.status(500).json({ error: "Failed to toggle bot mode" });
   }
 });
 

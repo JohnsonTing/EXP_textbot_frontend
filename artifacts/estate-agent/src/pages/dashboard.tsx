@@ -4,9 +4,9 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   BarChart, Bar, Cell
 } from "recharts";
-import { 
-  TrendingUp, Users, CalendarCheck, RefreshCw, Handshake, CheckCircle2, 
-  Flame, PoundSterling, Clock, Home, Building, Key 
+import {
+  TrendingUp, Users, CalendarCheck, RefreshCw, Handshake, CheckCircle2,
+  Home, Key
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { format, parseISO } from "date-fns";
@@ -52,11 +52,10 @@ export default function Dashboard() {
         </div>
 
         {/* Top High-Impact Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {renderMetricCard("Cost Savings (ROI)", metrics ? `£${metrics.costSavingsGBP.toLocaleString()}` : '0', <PoundSterling size={24} />, "+14%", "text-green-600", "bg-green-100")}
-          {renderMetricCard("Time Saved", metrics ? `${metrics.timeSavingsHours} hrs` : '0', <Clock size={24} />, "+22%", "text-purple-600", "bg-purple-100")}
-          {renderMetricCard("Viewings Booked", metrics?.viewingsBooked || 0, <CalendarCheck size={24} />, "+8%", "text-blue-600", "bg-blue-100")}
-          {renderMetricCard("Hot Leads", metrics?.hotLeads || 0, <Flame size={24} />, "+31%", "text-orange-600", "bg-orange-100")}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {renderMetricCard("Referrals", metrics?.referralLeads || 0, <Handshake size={24} />, undefined, "text-pink-600", "bg-pink-100")}
+          {renderMetricCard("Viewings Booked", metrics?.viewingsBooked || 0, <CalendarCheck size={24} />, undefined, "text-blue-600", "bg-blue-100")}
+          {renderMetricCard("Reactivated", metrics?.reactivatedLeads || 0, <RefreshCw size={24} />, undefined, "text-indigo-600", "bg-indigo-100")}
         </div>
 
         {/* CRM Pipeline Stats */}
