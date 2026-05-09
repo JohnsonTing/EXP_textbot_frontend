@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useListContacts, useCreateContact, useUpdateContact, useDeleteContact } from "@workspace/api-client-react";
+import type { Contact } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { format } from "date-fns";
 import { Search, Plus, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, MapPin, Building2, ExternalLink, Users, MessageCircle, Pencil, Trash2 } from "lucide-react";
@@ -17,7 +18,6 @@ import * as z from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { getListContactsQueryKey } from "@workspace/api-client-react";
 
-// Form Schema
 const contactSchema = z.object({
   name: z.string().min(1, "Name is required"),
   phone: z.string().min(5, "Phone is required"),
@@ -35,13 +35,12 @@ export default function Contacts() {
   const [search, setSearch] = useState("");
   const [intentFilter, setIntentFilter] = useState<string>("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [editingContact, setEditingContact] = useState<{ id: string; name: string; phone: string; email?: string | null; leadIntent?: string | null; propertyInMind?: string | null; bedrooms?: number | null; budget?: string | null; tags: string[] } | null>(null);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [deletingContactId, setDeletingContactId] = useState<string | null>(null);
+  const [editContact, setEditContact] = useState<Contact | null>(null);
+  const [deleteContact, setDeleteContact] = useState<Contact | null>(null);
   const [, setLocation] = useLocation();
 
   const queryClient = useQueryClient();
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
 
   const { data: contacts = [], isLoading } = useListContacts({
     search: search || undefined,
@@ -50,90 +49,52 @@ export default function Contacts() {
 
   const createContact = useCreateContact({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
-        setIsDialogOpen(false);
-        form.reset();
-      }
+      onSuccess: () => { invalidate(); setIsDialogOpen(false); form.reset(); }
     }
   });
 
   const updateContact = useUpdateContact({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
-        setIsEditDialogOpen(false);
-        setEditingContact(null);
-      }
+      onSuccess: () => { invalidate(); setEditContact(null); editForm.reset(); }
     }
   });
 
-  const deleteContact = useDeleteContact({
+  const deleteContactMutation = useDeleteContact({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListContactsQueryKey() });
-        setIsDeleteDialogOpen(false);
-        setDeletingContactId(null);
-      }
+      onSuccess: () => { invalidate(); setDeleteContact(null); }
     }
   });
 
   const form = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
-    defaultValues: {
-      name: "",
-      phone: "",
-      email: "",
-      leadIntent: "",
-      propertyInMind: "",
-      budget: "",
-      tags: [],
-    }
+    defaultValues: { name: "", phone: "", email: "", leadIntent: "", propertyInMind: "", budget: "", tags: [] }
   });
 
   const editForm = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
-    defaultValues: {
-      name: "",
-      phone: "",
-      email: "",
-      leadIntent: "",
-      propertyInMind: "",
-      budget: "",
-      tags: [],
-    }
+    defaultValues: { name: "", phone: "", email: "", leadIntent: "", propertyInMind: "", budget: "", tags: [] }
   });
 
-  useEffect(() => {
-    if (editingContact) {
-      editForm.reset({
-        name: editingContact.name,
-        phone: editingContact.phone,
-        email: editingContact.email || "",
-        leadIntent: editingContact.leadIntent || "",
-        propertyInMind: editingContact.propertyInMind || "",
-        bedrooms: editingContact.bedrooms ?? undefined,
-        budget: editingContact.budget || "",
-        tags: editingContact.tags.join(", ") as unknown as string[],
-      });
-    }
-  }, [editingContact]);
-
   const onSubmit = (data: ContactFormData) => {
-    createContact.mutate({
-      data: {
-        ...data,
-        tags: data.tags || []
-      }
+    createContact.mutate({ data: { ...data, tags: data.tags || [] } });
+  };
+
+  const openEdit = (contact: Contact) => {
+    setEditContact(contact);
+    editForm.reset({
+      name: contact.name,
+      phone: contact.phone,
+      email: contact.email ?? "",
+      leadIntent: contact.leadIntent ?? "",
+      propertyInMind: contact.propertyInMind ?? "",
+      budget: contact.budget ?? "",
+      tags: contact.tags as unknown as string[],
     });
   };
 
   const onEditSubmit = (data: ContactFormData) => {
-    if (!editingContact) return;
-    updateContact.mutate({
-      id: editingContact.id,
-      data: { ...data, tags: data.tags || [] }
-    });
+    if (!editContact) return;
+    updateContact.mutate({ id: encodeURIComponent(editContact.id), data: { ...data, tags: data.tags || [] } });
   };
 
   const getIntentColor = (intent?: string | null) => {
@@ -149,14 +110,14 @@ export default function Contacts() {
   return (
     <Layout>
       <div className="p-6 md:p-8 max-w-[1400px] mx-auto space-y-8">
-        
+
         {/* Header Actions */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">CRM Contacts</h1>
             <p className="text-muted-foreground mt-1">Manage and track your leads and clients.</p>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
@@ -179,7 +140,7 @@ export default function Contacts() {
                       <Input {...form.register("phone")} className="rounded-lg" placeholder="+44 7000 000000" />
                     </div>
                   </div>
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Email</label>
@@ -229,8 +190,8 @@ export default function Contacts() {
         <div className="glass-panel p-4 rounded-2xl flex flex-col sm:flex-row gap-4 justify-between items-center">
           <div className="relative w-full sm:w-96">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-            <Input 
-              placeholder="Search by name, email or phone..." 
+            <Input
+              placeholder="Search by name, email or phone..."
               className="pl-10 rounded-xl bg-background/50 border-border/50 h-11"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -253,7 +214,7 @@ export default function Contacts() {
                   <th className="px-6 py-4">Contact</th>
                   <th className="px-6 py-4">Contact Info</th>
                   <th className="px-6 py-4">Requirements</th>
-                  <th className="px-6 py-4">Intent & Tags</th>
+                  <th className="px-6 py-4">Buyer / Tenant</th>
                   <th className="px-6 py-4">Created On</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
@@ -331,11 +292,15 @@ export default function Contacts() {
                         )}
                       </td>
                       <td className="px-6 py-4 space-y-2">
-                        {contact.leadIntent && (
+                        {(contact as any).customerType ? (
+                          <Badge variant="secondary" className={`capitalize rounded-full ${getIntentColor((contact as any).customerType)} border-none shadow-sm`}>
+                            {(contact as any).customerType}
+                          </Badge>
+                        ) : contact.leadIntent ? (
                           <Badge variant="secondary" className={`capitalize rounded-full ${getIntentColor(contact.leadIntent)} border-none shadow-sm`}>
                             {contact.leadIntent}
                           </Badge>
-                        )}
+                        ) : null}
                         <div className="flex flex-wrap gap-1 mt-1">
                           {contact.tags.map((tag, idx) => (
                             <span key={idx} className="text-[10px] px-2 py-0.5 bg-muted text-muted-foreground rounded border border-border/50">
@@ -357,10 +322,7 @@ export default function Contacts() {
                           <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem
                               className="gap-2 cursor-pointer"
-                              onClick={() => {
-                                setEditingContact(contact);
-                                setIsEditDialogOpen(true);
-                              }}
+                              onClick={() => openEdit(contact)}
                             >
                               <Pencil size={14} />
                               Edit Contact
@@ -375,10 +337,7 @@ export default function Contacts() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                              onClick={() => {
-                                setDeletingContactId(contact.id);
-                                setIsDeleteDialogOpen(true);
-                              }}
+                              onClick={() => setDeleteContact(contact)}
                             >
                               <Trash2 size={14} />
                               Delete
@@ -396,12 +355,12 @@ export default function Contacts() {
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={(open) => { setIsDeleteDialogOpen(open); if (!open) setDeletingContactId(null); }}>
+      <AlertDialog open={!!deleteContact} onOpenChange={(open) => { if (!open) setDeleteContact(null); }}>
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Contact</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the contact and cannot be undone.
+              This will permanently delete <span className="font-medium text-foreground">{deleteContact?.name}</span> and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -409,19 +368,19 @@ export default function Contacts() {
             <AlertDialogAction
               className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                if (deletingContactId) {
-                  deleteContact.mutate({ id: deletingContactId as unknown as number });
+                if (deleteContact) {
+                  deleteContactMutation.mutate({ id: encodeURIComponent(deleteContact.id) as unknown as number });
                 }
               }}
             >
-              {deleteContact.isPending ? "Deleting..." : "Delete"}
+              {deleteContactMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Edit Contact Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={(open) => { setIsEditDialogOpen(open); if (!open) setEditingContact(null); }}>
+      <Dialog open={!!editContact} onOpenChange={(open) => { if (!open) setEditContact(null); }}>
         <DialogContent className="sm:max-w-[500px] rounded-2xl border-border bg-card">
           <DialogHeader>
             <DialogTitle className="text-xl font-display">Edit Contact</DialogTitle>
@@ -465,14 +424,12 @@ export default function Contacts() {
                 <Input {...editForm.register("budget")} className="rounded-lg" placeholder="£500k" />
               </div>
             </div>
-
             <div className="space-y-2">
               <label className="text-sm font-medium">Tags (comma separated)</label>
-              <Input {...editForm.register("tags")} className="rounded-lg" placeholder="hot lead, central london, family" />
+              <Input {...editForm.register("tags")} className="rounded-lg" placeholder="hot lead, central london" />
             </div>
-
             <div className="pt-4 flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="rounded-xl">Cancel</Button>
+              <Button type="button" variant="outline" onClick={() => setEditContact(null)} className="rounded-xl">Cancel</Button>
               <Button type="submit" disabled={updateContact.isPending} className="rounded-xl">
                 {updateContact.isPending ? "Saving..." : "Save Changes"}
               </Button>

@@ -11,7 +11,7 @@ const COOKIE_OPTS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
 router.post("/auth/login", async (req, res) => {
@@ -49,7 +49,6 @@ router.get("/auth/me", authMiddleware, (req, res) => {
   res.json(req.user);
 });
 
-// Admin-only: register a new agent
 router.post("/auth/register", authMiddleware, async (req, res) => {
   try {
     if (req.user?.role !== "admin") {
@@ -83,7 +82,6 @@ router.post("/auth/register", authMiddleware, async (req, res) => {
   }
 });
 
-// Admin-only: list all agents
 router.get("/auth/agents", authMiddleware, async (req, res) => {
   try {
     if (req.user?.role !== "admin") {

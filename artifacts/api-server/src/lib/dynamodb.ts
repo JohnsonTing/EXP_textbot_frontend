@@ -4,7 +4,7 @@ import { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand, UpdateComm
 const REGION = process.env.AWS_REGION || "us-east-1";
 export const CUSTOMERS_TABLE = "Customers";
 export const CONVERSATIONS_TABLE = "Conversations";
-export const USERS_TABLE = "EXP_agents";
+export const AGENTS_TABLE = "EXP_agents";
 
 function createClient() {
   const client = new DynamoDBClient({
@@ -33,7 +33,11 @@ export interface DynamoCustomer {
   enquiry_postcode?: string;
   enquiry_prop_type?: string;
   lead_intent?: string;
+  customer_type?: string;
+  bot_paused?: boolean;
   property_in_mind?: string;
+  responsible_agent_email?: string;
+  responsible_agent_id?: string;
   scraped_listings?: string;
   status?: string;
   summary?: string;
@@ -89,8 +93,8 @@ export async function updateCustomer(
   const updateExpr = "SET " + entries.map(([k], i) => `#f${i} = :v${i}`).join(", ");
   const names: Record<string, string> = {};
   const values: Record<string, unknown> = {};
-  entries.forEach(([k, v], i) => {
-    names[`#f${i}`] = k;
+  entries.forEach(([key, v], i) => {
+    names[`#f${i}`] = key;
     values[`:v${i}`] = v;
   });
 
@@ -110,6 +114,35 @@ export async function updateCustomer(
 export async function deleteCustomer(customerId: string): Promise<void> {
   const client = getDynamoClient();
   await client.send(new DeleteCommand({ TableName: CUSTOMERS_TABLE, Key: { customer_id: customerId } }));
+}
+
+export interface DynamoAgent {
+  email: string;
+  agent_id: string;
+  password_hash: string;
+  name: string;
+  phone?: string;
+  role: "agent" | "admin";
+  created_at: string;
+}
+
+export async function getAgent(email: string): Promise<DynamoAgent | null> {
+  const client = getDynamoClient();
+  const resp = await client.send(
+    new GetCommand({ TableName: AGENTS_TABLE, Key: { email } })
+  );
+  return (resp.Item as DynamoAgent) ?? null;
+}
+
+export async function putAgent(item: DynamoAgent): Promise<void> {
+  const client = getDynamoClient();
+  await client.send(new PutCommand({ TableName: AGENTS_TABLE, Item: item }));
+}
+
+export async function listAgents(): Promise<DynamoAgent[]> {
+  const client = getDynamoClient();
+  const resp = await client.send(new ScanCommand({ TableName: AGENTS_TABLE }));
+  return (resp.Items ?? []) as DynamoAgent[];
 }
 
 function nonEmpty(val: string | undefined | null): string | null {
@@ -162,35 +195,6 @@ export async function getMessagesByPhone(phoneNumber: string): Promise<DynamoMes
   return messages;
 }
 
-export interface DynamoAgent {
-  email: string;
-  agent_id: string;
-  password_hash: string;
-  name: string;
-  phone?: string;
-  role: "agent" | "admin";
-  created_at: string;
-}
-
-export async function getAgent(email: string): Promise<DynamoAgent | null> {
-  const client = getDynamoClient();
-  const resp = await client.send(
-    new GetCommand({ TableName: USERS_TABLE, Key: { email } })
-  );
-  return (resp.Item as DynamoAgent) ?? null;
-}
-
-export async function putAgent(item: DynamoAgent): Promise<void> {
-  const client = getDynamoClient();
-  await client.send(new PutCommand({ TableName: USERS_TABLE, Item: item }));
-}
-
-export async function listAgents(): Promise<DynamoAgent[]> {
-  const client = getDynamoClient();
-  const resp = await client.send(new ScanCommand({ TableName: USERS_TABLE }));
-  return (resp.Items ?? []) as DynamoAgent[];
-}
-
 export function mapDynamoToContact(c: DynamoCustomer) {
   const name = nonEmpty(c.contact_name) ?? "Unknown";
   const phone = nonEmpty(c.phone) ?? nonEmpty(c.customer_id) ?? "";
@@ -201,6 +205,7 @@ export function mapDynamoToContact(c: DynamoCustomer) {
     phone,
     tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : [],
     leadIntent: nonEmpty(c.lead_intent),
+    customerType: nonEmpty(c.customer_type),
     summary: nonEmpty(c.summary),
     propertyInMind: nonEmpty(c.property_in_mind),
     bedrooms: c.enquiry_bedrooms && c.enquiry_bedrooms > 0 ? c.enquiry_bedrooms : null,
@@ -209,6 +214,8 @@ export function mapDynamoToContact(c: DynamoCustomer) {
     enquiryPropType: nonEmpty(c.enquiry_prop_type),
     status: nonEmpty(c.status),
     scrapedListings: nonEmpty(c.scraped_listings),
+    responsibleAgentEmail: nonEmpty(c.responsible_agent_email),
+    responsibleAgentId: nonEmpty(c.responsible_agent_id),
     createdAt: nonEmpty(c.created_at) ?? new Date().toISOString(),
     updatedAt: nonEmpty(c.updated_at) ?? new Date().toISOString(),
   };

@@ -31,7 +31,9 @@ router.get("/contacts", async (req, res) => {
       );
     }
     if (leadIntent) {
-      customers = customers.filter((c) => c.lead_intent === leadIntent);
+      customers = customers.filter(
+        (c) => c.lead_intent === leadIntent || c.customer_type === leadIntent
+      );
     }
 
     res.json(customers.map(mapDynamoToContact));

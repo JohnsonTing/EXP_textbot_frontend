@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useSearch } from "wouter";
-import { useListConversations, useGetConversation, useSendMessage } from "@workspace/api-client-react";
-import { Send, Phone, User, Search, MessageCircle, MoreVertical, MessageSquare } from "lucide-react";
+import { useListConversations, useGetConversation, useSendMessage, useGetContact } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { getGetConversationQueryKey } from "@workspace/api-client-react";
+import { Send, Phone, User, Search, MessageCircle, MoreVertical, MessageSquare, Mail, Home, BedDouble, PoundSterling, MapPin, Tag, Calendar, Bot, UserCheck } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { format } from "date-fns";
 import { Layout } from "@/components/layout";
@@ -9,15 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-function Mail(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="20" height="16" x="2" y="4" rx="2"/>
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-    </svg>
-  );
-}
 
 export default function Conversations() {
   const [search, setSearch] = useState("");
@@ -39,8 +34,34 @@ export default function Conversations() {
 
   const sendMessageMutation = useSendMessage();
 
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [togglingBot, setTogglingBot] = useState(false);
   const [messageText, setMessageText] = useState("");
+  const queryClient = useQueryClient();
   const [sendError, setSendError] = useState<string | null>(null);
+
+  const botPaused = activeConversation?.botPaused ?? false;
+
+  const toggleBotMode = async () => {
+    if (!activePhone) return;
+    setTogglingBot(true);
+    try {
+      await fetch(`/api/conversations/${encodeURIComponent(activePhone)}/bot-mode`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ paused: !botPaused }),
+      });
+      queryClient.invalidateQueries({ queryKey: getGetConversationQueryKey(encodeURIComponent(activePhone)) });
+    } finally {
+      setTogglingBot(false);
+    }
+  };
+
+  const { data: contactProfile } = useGetContact(
+    activePhone ? encodeURIComponent(activePhone) : "",
+    { query: { enabled: !!activePhone && profileOpen } }
+  );
   const [optimisticMessages, setOptimisticMessages] = useState<
     { id: string; direction: string; content: string; sentAt: string; role: string; senderName: string; conversationId: string }[]
   >([]);
@@ -111,6 +132,127 @@ export default function Conversations() {
 
   return (
     <Layout>
+      {/* Contact Profile Sheet */}
+      <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
+        <SheetContent className="w-80 sm:w-96 overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Contact Profile</SheetTitle>
+          </SheetHeader>
+          {contactProfile ? (
+            <div className="mt-6 space-y-6">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <Avatar className="w-16 h-16 text-xl border-2 border-border">
+                  <AvatarFallback className="text-xl bg-primary/10 text-primary">
+                    {contactProfile.name.substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold text-lg">{contactProfile.name}</p>
+                  {contactProfile.status && (
+                    <Badge variant="secondary" className="mt-1 capitalize">{contactProfile.status}</Badge>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <Phone size={15} className="text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Phone</p>
+                    <p className="text-sm font-medium">{contactProfile.phone}</p>
+                  </div>
+                </div>
+                {contactProfile.email && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <Mail size={15} className="text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Email</p>
+                      <p className="text-sm font-medium">{contactProfile.email}</p>
+                    </div>
+                  </div>
+                )}
+                {contactProfile.leadIntent && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <User size={15} className="text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Intent</p>
+                      <p className="text-sm font-medium capitalize">{contactProfile.leadIntent}</p>
+                    </div>
+                  </div>
+                )}
+                {contactProfile.budget && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <PoundSterling size={15} className="text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Budget</p>
+                      <p className="text-sm font-medium">{contactProfile.budget}</p>
+                    </div>
+                  </div>
+                )}
+                {contactProfile.bedrooms && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <BedDouble size={15} className="text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Bedrooms</p>
+                      <p className="text-sm font-medium">{contactProfile.bedrooms}</p>
+                    </div>
+                  </div>
+                )}
+                {contactProfile.enquiryPostcode && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <MapPin size={15} className="text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Postcode</p>
+                      <p className="text-sm font-medium">{contactProfile.enquiryPostcode}</p>
+                    </div>
+                  </div>
+                )}
+                {contactProfile.propertyInMind && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                    <Home size={15} className="text-muted-foreground shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground">Property in mind</p>
+                      <p className="text-sm font-medium">{contactProfile.propertyInMind}</p>
+                    </div>
+                  </div>
+                )}
+                {contactProfile.tags.length > 0 && (
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                    <Tag size={15} className="text-muted-foreground shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1.5">Tags</p>
+                      <div className="flex flex-wrap gap-1">
+                        {contactProfile.tags.map((tag) => (
+                          <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {contactProfile.summary && (
+                  <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+                    <p className="text-xs text-muted-foreground">Summary</p>
+                    <p className="text-sm leading-relaxed">{contactProfile.summary}</p>
+                  </div>
+                )}
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <Calendar size={15} className="text-muted-foreground shrink-0" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Created</p>
+                    <p className="text-sm font-medium">{format(new Date(contactProfile.createdAt), "d MMM yyyy")}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-12 flex flex-col items-center text-muted-foreground gap-2">
+              <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-sm">Loading profile…</p>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
       <div className="flex h-[calc(100vh-4rem)]">
 
         {/* Left Sidebar */}
@@ -180,7 +322,7 @@ export default function Conversations() {
                           {conv.contactName}
                         </h4>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                          {conv.lastMessageAt ? format(new Date(conv.lastMessageAt), "HH:mm") : ""}
+                          {conv.lastMessageAt ? format(new Date(conv.lastMessageAt.endsWith("Z") || conv.lastMessageAt.includes("+") ? conv.lastMessageAt : conv.lastMessageAt + "Z"), "HH:mm") : ""}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-2">
@@ -231,7 +373,20 @@ export default function Conversations() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="hidden md:flex gap-2 rounded-xl">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={togglingBot}
+                      onClick={toggleBotMode}
+                      className={`hidden md:flex gap-2 rounded-xl transition-colors ${
+                        botPaused
+                          ? "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-700"
+                          : "border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/30 dark:text-green-400 dark:border-green-700"
+                      }`}
+                    >
+                      {botPaused ? <><UserCheck size={16} /> Manual Mode</> : <><Bot size={16} /> Bot Active</>}
+                    </Button>
+                    <Button variant="outline" size="sm" className="hidden md:flex gap-2 rounded-xl" onClick={() => setProfileOpen(true)}>
                       <User size={16} /> View Profile
                     </Button>
                     <Button variant="ghost" size="icon" className="rounded-xl">
@@ -242,41 +397,65 @@ export default function Conversations() {
 
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50 dark:bg-slate-900/20">
-                  <div className="text-center mb-4">
-                    <span className="text-xs bg-muted px-3 py-1 rounded-full text-muted-foreground font-medium border border-border/50">
-                      {activeConversation.createdAt
-                        ? format(new Date(activeConversation.createdAt), "MMMM d, yyyy")
-                        : "Conversation started"}
-                    </span>
-                  </div>
-
-                  {allMessages.map((msg) => {
+                  {allMessages.map((msg, i) => {
                     const isOutbound = msg.direction === "outbound";
+                    const rawAt = msg.sentAt.endsWith("Z") || msg.sentAt.includes("+") ? msg.sentAt : msg.sentAt + "Z";
+                    const msgDate = new Date(rawAt);
+                    const prevMsg = allMessages[i - 1];
+                    const prevDate = prevMsg ? new Date(prevMsg.sentAt) : null;
+                    const showDateSeparator =
+                      !prevDate ||
+                      format(msgDate, "yyyy-MM-dd") !== format(prevDate, "yyyy-MM-dd");
+
+                    const today = new Date();
+                    const yesterday = new Date(today);
+                    yesterday.setDate(yesterday.getDate() - 1);
+
+                    let dateLabel: string;
+                    if (format(msgDate, "yyyy-MM-dd") === format(today, "yyyy-MM-dd")) {
+                      dateLabel = "Today";
+                    } else if (format(msgDate, "yyyy-MM-dd") === format(yesterday, "yyyy-MM-dd")) {
+                      dateLabel = "Yesterday";
+                    } else {
+                      dateLabel = format(msgDate, "EEEE, MMMM d, yyyy");
+                    }
+
                     return (
-                      <div key={msg.id} className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
-                        <div
-                          className={`
-                            max-w-[75%] md:max-w-[65%] rounded-2xl px-4 py-3 shadow-sm
-                            ${isOutbound
-                              ? "bg-primary text-primary-foreground rounded-tr-sm"
-                              : "bg-card text-card-foreground border border-border/50 rounded-tl-sm"}
-                          `}
-                        >
-                          <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-li:my-0 prose-headings:my-1 prose-a:underline [&_a]:break-all">
-                            <ReactMarkdown
-                              components={{
-                                a: ({ href, children }) => (
-                                  <a href={href} target="_blank" rel="noopener noreferrer" className={isOutbound ? "text-primary-foreground opacity-90" : "text-primary"}>
-                                    {children}
-                                  </a>
-                                ),
-                              }}
-                            >
-                              {msg.content}
-                            </ReactMarkdown>
+                      <div key={msg.id}>
+                        {showDateSeparator && (
+                          <div className="flex items-center gap-3 my-4">
+                            <div className="flex-1 h-px bg-border/50" />
+                            <span className="text-xs bg-muted px-3 py-1 rounded-full text-muted-foreground font-medium border border-border/50 whitespace-nowrap">
+                              {dateLabel}
+                            </span>
+                            <div className="flex-1 h-px bg-border/50" />
                           </div>
-                          <div className={`text-[10px] mt-1.5 text-right opacity-60 ${isOutbound ? "text-primary-foreground" : "text-muted-foreground"}`}>
-                            {format(new Date(msg.sentAt), "HH:mm")}
+                        )}
+                        <div className={`flex ${isOutbound ? "justify-end" : "justify-start"}`}>
+                          <div
+                            className={`
+                              max-w-[75%] md:max-w-[65%] rounded-2xl px-4 py-3 shadow-sm
+                              ${isOutbound
+                                ? "bg-primary text-primary-foreground rounded-tr-sm"
+                                : "bg-card text-card-foreground border border-border/50 rounded-tl-sm"}
+                            `}
+                          >
+                            <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-li:my-0 prose-headings:my-1 prose-a:underline [&_a]:break-all">
+                              <ReactMarkdown
+                                components={{
+                                  a: ({ href, children }) => (
+                                    <a href={href} target="_blank" rel="noopener noreferrer" className={isOutbound ? "text-primary-foreground opacity-90" : "text-primary"}>
+                                      {children}
+                                    </a>
+                                  ),
+                                }}
+                              >
+                                {msg.content}
+                              </ReactMarkdown>
+                            </div>
+                            <div className={`text-[10px] mt-1.5 text-right opacity-60 ${isOutbound ? "text-primary-foreground" : "text-muted-foreground"}`}>
+                              {format(msgDate, "HH:mm")}
+                            </div>
                           </div>
                         </div>
                       </div>

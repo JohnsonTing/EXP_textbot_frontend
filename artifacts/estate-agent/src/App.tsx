@@ -5,7 +5,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { useAuth } from "@/hooks/useAuth";
 
-// Page Imports
 import Conversations from "./pages/conversations";
 import Contacts from "./pages/contacts";
 import Dashboard from "./pages/dashboard";
