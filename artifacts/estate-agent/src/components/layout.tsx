@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import { MessageSquare, Users, LayoutDashboard, Building2, Bell, LogOut, UserCircle, ChevronUp, Mail, Shield } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, useLogout } from "@/hooks/useAuth";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +29,8 @@ function getInitials(name: string): string {
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+  const logout = useLogout();
   const [profileOpen, setProfileOpen] = useState(false);
 
   const navItems = [
@@ -140,7 +141,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                onSelect={() => logout().then(() => window.location.reload())}
+                onSelect={() => logout.mutateAsync().then(() => window.location.reload())}
               >
                 <LogOut size={16} />
                 Sign out
