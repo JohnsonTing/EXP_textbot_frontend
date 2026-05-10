@@ -46,13 +46,20 @@ export default function Conversations() {
     if (!activePhone) return;
     setTogglingBot(true);
     try {
-      await fetch(`/api/conversations/${encodeURIComponent(activePhone)}/bot-mode`, {
+      const res = await fetch(`/api/conversations/${encodeURIComponent(activePhone)}/bot-mode`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ paused: !botPaused }),
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error("Bot mode toggle failed:", res.status, err);
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: getGetConversationQueryKey(encodeURIComponent(activePhone)) });
+    } catch (err) {
+      console.error("Bot mode toggle error:", err);
     } finally {
       setTogglingBot(false);
     }

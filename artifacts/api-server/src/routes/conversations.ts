@@ -87,6 +87,9 @@ router.get("/conversations", async (req, res) => {
   }
 });
 
+const findCustomerByPhone = (customers: Awaited<ReturnType<typeof scanCustomers>>, phone: string) =>
+  customers.find((c) => c.phone === phone || c.customer_id === phone);
+
 router.get("/conversations/:phone", async (req, res) => {
   try {
     const phone = decodeURIComponent(req.params.phone);
@@ -96,7 +99,7 @@ router.get("/conversations/:phone", async (req, res) => {
       scanCustomers(),
     ]);
 
-    const customer = allCustomers.find((c) => c.phone === phone);
+    const customer = findCustomerByPhone(allCustomers, phone);
 
     const sorted = [...messages].sort(
       (a, b) =>
@@ -135,9 +138,6 @@ router.get("/conversations/:phone", async (req, res) => {
     res.status(500).json({ error: "Failed to get conversation" });
   }
 });
-
-const findCustomerByPhone = (customers: Awaited<ReturnType<typeof scanCustomers>>, phone: string) =>
-  customers.find((c) => c.phone === phone || c.customer_id === phone);
 
 router.get("/conversations/:phone/bot-status", async (req, res) => {
   try {
