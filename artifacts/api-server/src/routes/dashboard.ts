@@ -1,103 +1,129 @@
 import { Router, type IRouter } from "express";
-import { gte, sql, count } from "drizzle-orm";
+import { scanCustomers, scanAllConversationsByPhone } from "../lib/dynamodb";
 
 const router: IRouter = Router();
 
 router.get("/dashboard/metrics", async (req, res) => {
   try {
-    const { db, contactsTable, conversationsTable, messagesTable } = await import("@workspace/db");
+    const [customers, conversationsByPhone] = await Promise.all([
+      scanCustomers(),
+      scanAllConversationsByPhone(),
+    ]);
 
-    const [contactStats] = await db
-      .select({
-        total: count(),
-        buyers: sql<number>`count(*) filter (where lead_intent = 'buyer')`,
-        renters: sql<number>`count(*) filter (where lead_intent = 'renter')`,
-        landlordsVendors: sql<number>`count(*) filter (where lead_intent in ('landlord', 'vendor'))`,
-        hotLeads: sql<number>`count(*) filter (where lead_intent = 'buyer' and budget is not null)`,
-      })
-      .from(contactsTable);
+    // ── Lead intent counts ──────────────────────────────────────────────────
+    const buyers = customers.filter(
+      (c) => c.lead_intent?.toLowerCase() === "buyer"
+    ).length;
 
-    const [convStats] = await db
-      .select({
-        total: count(),
-        active: sql<number>`count(*) filter (where status = 'active')`,
-      })
-      .from(conversationsTable);
+    const renters = customers.filter(
+      (c) => c.lead_intent?.toLowerCase() === "renter"
+    ).length;
 
-    const [messageStats] = await db
-      .select({
-        total: count(),
-      })
-      .from(messagesTable);
+    const landlordsVendors = customers.filter((c) =>
+      ["landlord", "vendor"].includes(c.lead_intent?.toLowerCase() ?? "")
+    ).length;
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    // ── Hot leads: buyers with a budget set ─────────────────────────────────
+    const hotLeads = customers.filter(
+      (c) =>
+        c.lead_intent?.toLowerCase() === "buyer" &&
+        c.enquiry_max_price != null &&
+        c.enquiry_max_price > 0
+    ).length;
 
-    const weeklyConversations = await db
-      .select({
-        date: sql<string>`date_trunc('day', created_at)::date::text`,
-        count: count(),
-      })
-      .from(conversationsTable)
-      .where(gte(conversationsTable.createdAt, sevenDaysAgo))
-      .groupBy(sql`date_trunc('day', created_at)`)
-      .orderBy(sql`date_trunc('day', created_at)`);
+    // ── Tag-based metrics ───────────────────────────────────────────────────
+    const hasTag = (tags: string[] | undefined, keyword: string) =>
+      tags?.some((t) => t.toLowerCase().includes(keyword)) ?? false;
 
-    const channelCounts = await db
-      .select({
-        channel: conversationsTable.channel,
-        count: count(),
-      })
-      .from(conversationsTable)
-      .groupBy(conversationsTable.channel);
+    const reactivatedLeads = customers.filter((c) =>
+      hasTag(c.tags, "reactivat")
+    ).length;
 
-    const totalContacts = Number(contactStats?.total ?? 0);
-    const totalConvs = Number(convStats?.total ?? 0);
-    const buyers = Number(contactStats?.buyers ?? 0);
-    const renters = Number(contactStats?.renters ?? 0);
-    const landlordsVendors = Number(contactStats?.landlordsVendors ?? 0);
-    const hotLeads = Number(contactStats?.hotLeads ?? 0);
+    const referralLeads = customers.filter((c) =>
+      hasTag(c.tags, "referral")
+    ).length;
 
-    const leadsEngaged = Math.floor(totalContacts * 0.75);
-    const viewingsBooked = Math.floor(totalContacts * 0.2);
-    const reactivatedLeads = Math.floor(totalContacts * 0.1);
-    const referralLeads = Math.floor(totalContacts * 0.05);
-    const portalLeadsQualified = Math.floor(totalContacts * 0.3);
-    const leadsEngagedInstantly = Math.floor(leadsEngaged * 0.6);
+    const viewingsBooked = customers.filter((c) =>
+      hasTag(c.tags, "viewing")
+    ).length;
 
+    // ── Qualified: has at least one requirement field set ───────────────────
+    const portalLeadsQualified = customers.filter(
+      (c) =>
+        (c.enquiry_max_price != null && c.enquiry_max_price > 0) ||
+        (c.enquiry_bedrooms != null && c.enquiry_bedrooms > 0) ||
+        (c.enquiry_postcode != null && c.enquiry_postcode.trim() !== "")
+    ).length;
+
+    // ── Engagement: customers that have at least one conversation ───────────
+    const phonesWithConversations = new Set(Object.keys(conversationsByPhone));
+
+    const engagedCustomers = customers.filter(
+      (c) =>
+        phonesWithConversations.has(c.phone ?? "") ||
+        phonesWithConversations.has(c.customer_id)
+    );
+    const leadsEngaged = engagedCustomers.length;
+
+    // ── Instant reply: conversations where bot sent at least one message ────
+    //    (bot is role !== "user", meaning the assistant replied)
+    const leadsEngagedInstantly = Object.values(conversationsByPhone).filter(
+      (msgs) => msgs.some((m) => m.role !== "user")
+    ).length;
+
+    // ── Time / cost savings ─────────────────────────────────────────────────
     const avgMinutesPerLead = 15;
-    const timeSavingsHours = (leadsEngagedInstantly * avgMinutesPerLead) / 60;
-    const costPerHour = 25;
-    const costSavingsGBP = timeSavingsHours * costPerHour;
+    const timeSavingsHours =
+      (leadsEngagedInstantly * avgMinutesPerLead) / 60;
+    const costSavingsGBP = timeSavingsHours * 25;
+
+    // ── New conversations last 7 days (by date of first message) ───────────
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const dailyMap: Record<string, number> = {};
+    for (const msgs of Object.values(conversationsByPhone)) {
+      if (msgs.length === 0) continue;
+      const earliest = msgs.reduce((min, m) =>
+        m.timestamp < min.timestamp ? m : min
+      );
+      const d = new Date(earliest.timestamp);
+      if (d >= sevenDaysAgo) {
+        const dateStr = d.toISOString().split("T")[0];
+        dailyMap[dateStr] = (dailyMap[dateStr] ?? 0) + 1;
+      }
+    }
 
     const newConversationsLastWeek: { date: string; count: number }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      const found = weeklyConversations.find((r) => r.date === dateStr);
-      newConversationsLastWeek.push({ date: dateStr, count: found ? Number(found.count) : 0 });
+      newConversationsLastWeek.push({
+        date: dateStr,
+        count: dailyMap[dateStr] ?? 0,
+      });
     }
 
-    const messagesByChannel = channelCounts.map((r) => ({
-      channel: r.channel,
-      count: Number(r.count),
-    }));
+    // ── Messages by channel (all WhatsApp — phone-number based) ────────────
+    const totalMessages = Object.values(conversationsByPhone).reduce(
+      (sum, msgs) => sum + msgs.length,
+      0
+    );
+    const messagesByChannel = [
+      { channel: "whatsapp", count: totalMessages },
+      { channel: "sms", count: 0 },
+      { channel: "email", count: 0 },
+    ];
 
-    if (messagesByChannel.length === 0) {
-      messagesByChannel.push(
-        { channel: "whatsapp", count: 0 },
-        { channel: "sms", count: 0 },
-        { channel: "email", count: 0 }
-      );
-    }
-
+    // ── Funnel ──────────────────────────────────────────────────────────────
     const funnel = {
-      newLeads: totalContacts,
+      newLeads: customers.length,
       engaged: leadsEngaged,
       qualified: portalLeadsQualified,
       viewingsBooked,
-      offers: Math.floor(viewingsBooked * 0.3),
+      offers: 0,
     };
 
     res.json({
