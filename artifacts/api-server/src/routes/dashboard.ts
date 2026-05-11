@@ -72,9 +72,7 @@ router.get("/dashboard/metrics", async (req, res) => {
     ).length;
 
     // ── Time / cost savings ─────────────────────────────────────────────────
-    const avgMinutesPerLead = 15;
-    const timeSavingsHours =
-      (leadsEngagedInstantly * avgMinutesPerLead) / 60;
+    const timeSavingsHours = (viewingsBooked * 15) / 60;
     const costSavingsGBP = timeSavingsHours * 25;
 
     // ── New conversations last 7 days (by date of first message) ───────────
