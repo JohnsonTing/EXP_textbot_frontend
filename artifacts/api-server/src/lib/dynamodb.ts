@@ -216,6 +216,7 @@ export function mapDynamoToContact(c: DynamoCustomer) {
     scrapedListings: nonEmpty(c.scraped_listings),
     responsibleAgentEmail: nonEmpty(c.responsible_agent_email),
     responsibleAgentId: nonEmpty(c.responsible_agent_id),
+    botPaused: c.bot_paused ?? false,
     createdAt: nonEmpty(c.created_at) ?? new Date().toISOString(),
     updatedAt: nonEmpty(c.updated_at) ?? new Date().toISOString(),
   };

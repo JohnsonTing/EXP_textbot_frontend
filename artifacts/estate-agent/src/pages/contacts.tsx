@@ -4,7 +4,7 @@ import { useListContacts, useCreateContact, useUpdateContact, useDeleteContact }
 import type { Contact } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { format } from "date-fns";
-import { Search, Plus, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, MapPin, Building2, ExternalLink, Users, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Mail, Phone, Home, PoundSterling, BedDouble, MapPin, Building2, ExternalLink, Users, MessageCircle, Pencil, Trash2, UserCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -248,7 +248,14 @@ export default function Contacts() {
                               {contact.name.substring(0, 2).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className="font-medium text-foreground">{contact.name}</div>
+                          <div>
+                            <div className="font-medium text-foreground">{contact.name}</div>
+                            {(contact as any).botPaused && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-orange-600 bg-orange-50 border border-orange-200 rounded-full px-2 py-0.5 mt-0.5">
+                                <UserCheck size={10} /> Manual
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 space-y-1">

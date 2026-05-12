@@ -14,7 +14,7 @@ function buildConversationList(
   grouped: Record<string, DynamoMessage[]>,
   customers: Record<
     string,
-    { name: string; phone: string; customerId: string }
+    { name: string; phone: string; customerId: string; botPaused: boolean }
   >,
 ) {
   return Object.entries(grouped)
@@ -35,6 +35,7 @@ function buildConversationList(
         lastMessage: last?.message ?? null,
         lastMessageAt: last?.timestamp ?? null,
         unreadCount: 0,
+        botPaused: customer?.botPaused ?? false,
         createdAt: sorted[0]?.timestamp ?? new Date().toISOString(),
         messageCount: messages.length,
       };
@@ -57,14 +58,14 @@ router.get("/conversations", async (req, res) => {
 
     const customersByPhone: Record<
       string,
-      { name: string; phone: string; customerId: string }
+      { name: string; phone: string; customerId: string; botPaused: boolean }
     > = {};
     for (const c of allCustomers) {
       const ph = c.phone || c.customer_id;
       if (ph) {
         const name =
           c.contact_name && c.contact_name.trim() ? c.contact_name.trim() : ph;
-        customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id };
+        customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id, botPaused: c.bot_paused ?? false };
       }
     }
 

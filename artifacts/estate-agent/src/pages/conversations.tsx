@@ -325,10 +325,17 @@ export default function Conversations() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-baseline mb-1">
-                        <h4 className="font-semibold text-sm text-foreground truncate pr-2">
-                          {conv.contactName}
-                        </h4>
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <h4 className="font-semibold text-sm text-foreground truncate">
+                            {conv.contactName}
+                          </h4>
+                          {conv.botPaused && (
+                            <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-full px-1.5 py-0.5">
+                              <UserCheck size={9} /> Manual
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-1">
                           {conv.lastMessageAt ? format(new Date(conv.lastMessageAt.endsWith("Z") || conv.lastMessageAt.includes("+") ? conv.lastMessageAt : conv.lastMessageAt + "Z"), "HH:mm") : ""}
                         </span>
                       </div>

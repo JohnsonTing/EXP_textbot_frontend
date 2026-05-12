@@ -30,6 +30,8 @@ export interface Contact {
   status?: string | null;
   /** JSON string of similar scraped listings */
   scrapedListings?: string | null;
+  /** true = agent manually handling, bot is off */
+  botPaused?: boolean | null;
   createdAt: Date;
   updatedAt: Date;
 }

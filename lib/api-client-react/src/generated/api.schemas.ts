@@ -33,6 +33,8 @@ export interface Contact {
   status?: string | null;
   /** JSON string of similar scraped listings */
   scrapedListings?: string | null;
+  /** true = agent manually handling, bot is off */
+  botPaused?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +77,8 @@ export interface Conversation {
   lastMessageAt?: string | null;
   unreadCount: number;
   messageCount?: number;
+  /** true = agent manually handling, bot is off */
+  botPaused?: boolean;
   createdAt: string;
 }
 
