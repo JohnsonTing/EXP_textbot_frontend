@@ -58,7 +58,7 @@ router.get("/conversations", async (req, res) => {
 
     const customersByPhone: Record<
       string,
-      { name: string; phone: string; customerId: string }
+      { name: string; phone: string; customerId: string; botPaused: boolean }
     > = {};
     for (const c of allCustomers) {
       const ph = c.phone || c.customer_id;
