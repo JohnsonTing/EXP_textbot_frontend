@@ -7,9 +7,10 @@ interface Agent {
   phone?: string;
 }
 
-async function fetchMe(): Promise<Agent> {
+async function fetchMe(): Promise<Agent | null> {
   const res = await fetch("/api/auth/me", { credentials: "include" });
-  if (!res.ok) throw new Error("Unauthenticated");
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error("Auth check failed");
   return res.json();
 }
 
@@ -32,14 +33,18 @@ async function postLogout(): Promise<void> {
 }
 
 export function useAuth() {
-  const { data: user, isLoading } = useQuery<Agent | null>({
+  const { data, isPending } = useQuery<Agent | null>({
     queryKey: ["auth-me"],
     queryFn: fetchMe,
     retry: false,
     staleTime: 5 * 60 * 1000,
   });
 
-  return { user: user ?? null, isLoading, isAuthenticated: !!user };
+  return {
+    user: data ?? null,
+    isLoading: isPending,
+    isAuthenticated: !!data,
+  };
 }
 
 export function useLogin() {
