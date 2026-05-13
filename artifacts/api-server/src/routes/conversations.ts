@@ -14,7 +14,7 @@ function buildConversationList(
   grouped: Record<string, DynamoMessage[]>,
   customers: Record<
     string,
-    { name: string; phone: string; customerId: string }
+    { name: string; phone: string; customerId: string; botPaused: boolean }
   >,
 ) {
   return Object.entries(grouped)
@@ -32,6 +32,7 @@ function buildConversationList(
         contactPhone: phone,
         channel: "whatsapp",
         status: "active",
+        botPaused: customer?.botPaused ?? false,
         lastMessage: last?.message ?? null,
         lastMessageAt: last?.timestamp ?? null,
         unreadCount: 0,
@@ -64,7 +65,7 @@ router.get("/conversations", async (req, res) => {
       if (ph) {
         const name =
           c.contact_name && c.contact_name.trim() ? c.contact_name.trim() : ph;
-        customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id };
+        customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id, botPaused: c.bot_paused ?? false };
       }
     }
 
