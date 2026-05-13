@@ -16,9 +16,16 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 export default function Conversations() {
   const [search, setSearch] = useState("");
   const [activePhone, setActivePhone] = useState<string | null>(null);
+  const [botFilter, setBotFilter] = useState<"all" | "manual" | "bot">("all");
 
   const { data: conversations = [], isLoading: isLoadingConversations } = useListConversations({
     search: search || undefined,
+  });
+
+  const filteredConversations = conversations.filter((conv) => {
+    if (botFilter === "manual") return conv.botPaused;
+    if (botFilter === "bot") return !conv.botPaused;
+    return true;
   });
 
   const encodedPhone = activePhone ? encodeURIComponent(activePhone) : "";
@@ -262,9 +269,21 @@ export default function Conversations() {
               />
             </div>
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-              <Badge variant="secondary" className="rounded-full bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">All</Badge>
-              <Badge variant="outline" className="rounded-full cursor-pointer hover:bg-muted">WhatsApp</Badge>
-              <Badge variant="outline" className="rounded-full cursor-pointer hover:bg-muted">Active</Badge>
+              <Badge
+                variant={botFilter === "all" ? "secondary" : "outline"}
+                className={`rounded-full cursor-pointer ${botFilter === "all" ? "bg-primary/10 text-primary hover:bg-primary/20" : "hover:bg-muted"}`}
+                onClick={() => setBotFilter("all")}
+              >All</Badge>
+              <Badge
+                variant={botFilter === "manual" ? "secondary" : "outline"}
+                className={`rounded-full cursor-pointer ${botFilter === "manual" ? "bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200" : "hover:bg-muted"}`}
+                onClick={() => setBotFilter("manual")}
+              >Manual Mode</Badge>
+              <Badge
+                variant={botFilter === "bot" ? "secondary" : "outline"}
+                className={`rounded-full cursor-pointer ${botFilter === "bot" ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-200" : "hover:bg-muted"}`}
+                onClick={() => setBotFilter("bot")}
+              >Bot Active</Badge>
             </div>
           </div>
 
@@ -281,14 +300,14 @@ export default function Conversations() {
                   </div>
                 ))}
               </div>
-            ) : conversations.length === 0 ? (
+            ) : filteredConversations.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground flex flex-col items-center">
                 <MessageSquare className="w-12 h-12 mb-3 opacity-20" />
                 <p>No conversations found</p>
               </div>
             ) : (
               <div className="divide-y divide-border/20">
-                {conversations.map((conv) => (
+                {filteredConversations.map((conv) => (
                   <button
                     key={conv.id}
                     onClick={() => setActivePhone(conv.id)}
@@ -312,10 +331,21 @@ export default function Conversations() {
 
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-baseline mb-1">
-                        <h4 className="font-semibold text-sm text-foreground truncate pr-2">
-                          {conv.contactName}
-                        </h4>
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <h4 className="font-semibold text-sm text-foreground truncate">
+                            {conv.contactName}
+                          </h4>
+                          {conv.botPaused ? (
+                            <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-full px-1.5 py-0.5">
+                              <UserCheck size={9} /> Manual
+                            </span>
+                          ) : (
+                            <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0.5">
+                              <Bot size={9} /> Bot
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-1">
                           {conv.lastMessageAt ? format(new Date(conv.lastMessageAt.endsWith("Z") || conv.lastMessageAt.includes("+") ? conv.lastMessageAt : conv.lastMessageAt + "Z"), "HH:mm") : ""}
                         </span>
                       </div>
