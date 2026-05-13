@@ -75,6 +75,8 @@ export interface Conversation {
   lastMessageAt?: string | null;
   unreadCount: number;
   messageCount?: number;
+  /** true = agent manually handling, bot is off */
+  botPaused?: boolean;
   createdAt: string;
 }
 
