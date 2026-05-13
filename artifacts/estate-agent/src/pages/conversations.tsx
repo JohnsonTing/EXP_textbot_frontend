@@ -17,12 +17,19 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 export default function Conversations() {
   const [search, setSearch] = useState("");
   const [activePhone, setActivePhone] = useState<string | null>(null);
+  const [botFilter, setBotFilter] = useState<"all" | "manual" | "bot">("all");
 
   const searchString = useSearch();
   const phoneParam = useMemo(() => new URLSearchParams(searchString).get("phone"), [searchString]);
 
   const { data: conversations = [], isLoading: isLoadingConversations } = useListConversations({
     search: search || undefined,
+  });
+
+  const filteredConversations = conversations.filter((conv) => {
+    if (botFilter === "manual") return conv.botPaused === true;
+    if (botFilter === "bot") return !conv.botPaused;
+    return true;
   });
 
   const encodedPhone = activePhone ? encodeURIComponent(activePhone) : "";
@@ -275,9 +282,9 @@ export default function Conversations() {
               />
             </div>
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-              <Badge variant="secondary" className="rounded-full bg-primary/10 text-primary hover:bg-primary/20 cursor-pointer">All</Badge>
-              <Badge variant="outline" className="rounded-full cursor-pointer hover:bg-muted">WhatsApp</Badge>
-              <Badge variant="outline" className="rounded-full cursor-pointer hover:bg-muted">Active</Badge>
+              <Badge onClick={() => setBotFilter("all")} variant="secondary" className={`rounded-full cursor-pointer transition-colors ${botFilter === "all" ? "bg-primary/10 text-primary hover:bg-primary/20" : "hover:bg-muted"}`}>All</Badge>
+              <Badge onClick={() => setBotFilter("manual")} variant="secondary" className={`rounded-full cursor-pointer transition-colors ${botFilter === "manual" ? "bg-orange-100 text-orange-600 border border-orange-200 hover:bg-orange-100" : "bg-transparent border border-border hover:bg-muted text-foreground"}`}>Manual Mode</Badge>
+              <Badge onClick={() => setBotFilter("bot")} variant="secondary" className={`rounded-full cursor-pointer transition-colors ${botFilter === "bot" ? "bg-green-100 text-green-700 border border-green-200 hover:bg-green-100" : "bg-transparent border border-border hover:bg-muted text-foreground"}`}>Bot Active</Badge>
             </div>
           </div>
 
@@ -294,14 +301,14 @@ export default function Conversations() {
                   </div>
                 ))}
               </div>
-            ) : conversations.length === 0 ? (
+            ) : filteredConversations.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground flex flex-col items-center">
                 <MessageSquare className="w-12 h-12 mb-3 opacity-20" />
                 <p>No conversations found</p>
               </div>
             ) : (
               <div className="divide-y divide-border/20">
-                {conversations.map((conv) => (
+                {filteredConversations.map((conv) => (
                   <button
                     key={conv.id}
                     onClick={() => setActivePhone(conv.id)}
