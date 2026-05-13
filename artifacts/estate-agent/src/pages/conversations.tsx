@@ -335,13 +335,9 @@ export default function Conversations() {
                           <h4 className="font-semibold text-sm text-foreground truncate">
                             {conv.contactName}
                           </h4>
-                          {conv.botPaused ? (
+                          {conv.botPaused && (
                             <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded-full px-1.5 py-0.5">
                               <UserCheck size={9} /> Manual
-                            </span>
-                          ) : (
-                            <span className="shrink-0 inline-flex items-center gap-0.5 text-[9px] font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-1.5 py-0.5">
-                              <Bot size={9} /> Bot
                             </span>
                           )}
                         </div>
