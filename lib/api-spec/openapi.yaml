@@ -395,6 +395,8 @@ components:
           type: string
           format: date-time
           nullable: true
+        botPaused:
+          type: boolean
         unreadCount:
           type: integer
         messageCount:
@@ -409,6 +411,7 @@ components:
         - contactPhone
         - channel
         - status
+        - botPaused
         - unreadCount
         - createdAt
 
@@ -434,6 +437,8 @@ components:
           type: string
           format: date-time
           nullable: true
+        botPaused:
+          type: boolean
         unreadCount:
           type: integer
         createdAt:
@@ -450,6 +455,7 @@ components:
         - contactPhone
         - channel
         - status
+        - botPaused
         - unreadCount
         - createdAt
         - messages

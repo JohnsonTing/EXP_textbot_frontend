@@ -25,6 +25,8 @@ export function getDynamoClient() {
 
 export interface DynamoCustomer {
   customer_id: string;
+  "First Name"?: string;
+  "Last Name"?: string;
   contact_name?: string;
   created_at?: string;
   email?: string;
@@ -117,8 +119,8 @@ export async function deleteCustomer(customerId: string): Promise<void> {
 }
 
 export interface DynamoAgent {
-  email: string;
   agent_id: string;
+  email: string;
   password_hash: string;
   name: string;
   phone?: string;
@@ -128,10 +130,12 @@ export interface DynamoAgent {
 
 export async function getAgent(email: string): Promise<DynamoAgent | null> {
   const client = getDynamoClient();
-  const resp = await client.send(
-    new GetCommand({ TableName: AGENTS_TABLE, Key: { email } })
-  );
-  return (resp.Item as DynamoAgent) ?? null;
+  const resp = await client.send(new ScanCommand({
+    TableName: AGENTS_TABLE,
+    FilterExpression: "email = :email",
+    ExpressionAttributeValues: { ":email": email },
+  }));
+  return (resp.Items?.[0] as DynamoAgent) ?? null;
 }
 
 export async function putAgent(item: DynamoAgent): Promise<void> {
@@ -195,8 +199,15 @@ export async function getMessagesByPhone(phoneNumber: string): Promise<DynamoMes
   return messages;
 }
 
+export function buildCustomerName(c: DynamoCustomer): string {
+  const first = c["First Name"]?.trim() ?? "";
+  const last = c["Last Name"]?.trim() ?? "";
+  const combined = [first, last].filter(Boolean).join(" ");
+  return combined || c.contact_name?.trim() || "Unknown";
+}
+
 export function mapDynamoToContact(c: DynamoCustomer) {
-  const name = nonEmpty(c.contact_name) ?? "Unknown";
+  const name = buildCustomerName(c);
   const phone = nonEmpty(c.phone) ?? nonEmpty(c.customer_id) ?? "";
   return {
     id: c.customer_id,

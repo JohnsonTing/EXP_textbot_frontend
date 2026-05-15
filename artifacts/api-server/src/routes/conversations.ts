@@ -5,6 +5,7 @@ import {
   scanCustomers,
   updateCustomer,
   putCustomer,
+  buildCustomerName,
   type DynamoMessage,
 } from "../lib/dynamodb";
 
@@ -32,10 +33,10 @@ function buildConversationList(
         contactPhone: phone,
         channel: "whatsapp",
         status: "active",
+        botPaused: customer?.botPaused ?? false,
         lastMessage: last?.message ?? null,
         lastMessageAt: last?.timestamp ?? null,
         unreadCount: 0,
-        botPaused: customer?.botPaused ?? false,
         createdAt: sorted[0]?.timestamp ?? new Date().toISOString(),
         messageCount: messages.length,
       };
@@ -63,8 +64,7 @@ router.get("/conversations", async (req, res) => {
     for (const c of allCustomers) {
       const ph = c.phone || c.customer_id;
       if (ph) {
-        const name =
-          c.contact_name && c.contact_name.trim() ? c.contact_name.trim() : ph;
+        const name = buildCustomerName(c) !== "Unknown" ? buildCustomerName(c) : ph;
         customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id, botPaused: c.bot_paused ?? false };
       }
     }
@@ -114,7 +114,7 @@ router.get("/conversations/:phone", async (req, res) => {
       content: m.message,
       role: m.role,
       senderName:
-        m.role === "user" ? (customer?.contact_name ?? phone) : "Assistant",
+        m.role === "user" ? (customer ? buildCustomerName(customer) : phone) : "Assistant",
       sentAt: m.timestamp,
     }));
 
@@ -123,7 +123,7 @@ router.get("/conversations/:phone", async (req, res) => {
     res.json({
       id: phone,
       contactId: customer?.customer_id ?? phone,
-      contactName: customer?.contact_name ?? phone,
+      contactName: customer ? buildCustomerName(customer) : phone,
       contactPhone: phone,
       channel: "whatsapp",
       status: "active",

@@ -16,6 +16,7 @@ export interface ConversationDetail {
   status: string;
   lastMessage?: string | null;
   lastMessageAt?: Date | null;
+  botPaused: boolean;
   unreadCount: number;
   createdAt: Date;
   messages: Message[];

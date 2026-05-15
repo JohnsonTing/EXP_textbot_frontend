@@ -182,6 +182,7 @@ export const ListConversationsResponseItem = zod.object({
   status: zod.string().describe("active, closed, pending"),
   lastMessage: zod.string().nullish(),
   lastMessageAt: zod.date().nullish(),
+  botPaused: zod.boolean(),
   unreadCount: zod.number(),
   messageCount: zod.number().optional(),
   createdAt: zod.date(),
@@ -214,6 +215,7 @@ export const GetConversationResponse = zod.object({
   status: zod.string(),
   lastMessage: zod.string().nullish(),
   lastMessageAt: zod.date().nullish(),
+  botPaused: zod.boolean(),
   unreadCount: zod.number(),
   createdAt: zod.date(),
   messages: zod.array(
