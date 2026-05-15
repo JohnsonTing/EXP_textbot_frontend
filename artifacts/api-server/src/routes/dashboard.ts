@@ -1,99 +1,116 @@
 import { Router, type IRouter } from "express";
-import { gte, sql, count } from "drizzle-orm";
+import { getDynamoClient, CUSTOMERS_TABLE, CONVERSATIONS_TABLE } from "../lib/dynamodb";
+import { ScanCommand } from "@aws-sdk/lib-dynamodb";
+
+const METRICS_TABLE = "EXP_agent_metrics";
+
+async function fullScan(tableName: string): Promise<Record<string, unknown>[]> {
+  const client = getDynamoClient();
+  const items: Record<string, unknown>[] = [];
+  let lastKey: Record<string, unknown> | undefined;
+  do {
+    const resp = await client.send(new ScanCommand({ TableName: tableName, ExclusiveStartKey: lastKey }));
+    items.push(...((resp.Items ?? []) as Record<string, unknown>[]));
+    lastKey = resp.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+  return items;
+}
 
 const router: IRouter = Router();
 
 router.get("/dashboard/metrics", async (req, res) => {
   try {
-    const { db, contactsTable, conversationsTable, messagesTable } = await import("@workspace/db");
+    const [customers, metricEvents, conversations] = await Promise.all([
+      fullScan(CUSTOMERS_TABLE),
+      fullScan(METRICS_TABLE),
+      fullScan(CONVERSATIONS_TABLE),
+    ]);
 
-    const [contactStats] = await db
-      .select({
-        total: count(),
-        buyers: sql<number>`count(*) filter (where lead_intent = 'buyer')`,
-        renters: sql<number>`count(*) filter (where lead_intent = 'renter')`,
-        landlordsVendors: sql<number>`count(*) filter (where lead_intent in ('landlord', 'vendor'))`,
-        hotLeads: sql<number>`count(*) filter (where lead_intent = 'buyer' and budget is not null)`,
-      })
-      .from(contactsTable);
+    // --- Customers ---
+    const buyers = customers.filter((c) => c.customer_type === "buyer").length;
+    const renters = customers.filter((c) => c.customer_type === "renter").length;
+    const landlordsVendors = customers.filter((c) =>
+      c.customer_type === "landlord" || c.customer_type === "vendor"
+    ).length;
+    const hotLeads = customers.filter((c) => Number(c.enquiry_max_price) > 0).length;
+    const portalLeadsQualified = customers.filter(
+      (c) => Number(c.enquiry_max_price) > 0 || Number(c.enquiry_bedrooms) > 0 || c.enquiry_postcode
+    ).length;
+    // --- Agent metrics ---
+    const enquiryCustomers = new Set(
+      metricEvents
+        .filter((e) => e.event_type === "enquiry_received")
+        .map((e) => e.customer_id)
+    );
+    const instantCustomers = new Set(
+      metricEvents
+        .filter((e) => e.event_type === "first_message_sent")
+        .map((e) => e.customer_id)
+    );
+    const viewingCustomers = new Set(
+      metricEvents
+        .filter((e) => e.event_type === "viewing_booked")
+        .map((e) => e.customer_id)
+    );
+    const referralCustomers = new Set(
+      metricEvents
+        .filter((e) => e.event_type === "referral")
+        .map((e) => e.customer_id)
+    );
+    const reactivatedCustomers = new Set(
+      metricEvents
+        .filter((e) => e.event_type === "lead_reactivated")
+        .map((e) => e.customer_id)
+    );
 
-    const [convStats] = await db
-      .select({
-        total: count(),
-        active: sql<number>`count(*) filter (where status = 'active')`,
-      })
-      .from(conversationsTable);
+    const leadsEngaged = enquiryCustomers.size;
+    const leadsEngagedInstantly = instantCustomers.size;
+    const viewingsBooked = viewingCustomers.size;
+    const referralLeads = referralCustomers.size;
+    const reactivatedLeads = reactivatedCustomers.size;
 
-    const [messageStats] = await db
-      .select({
-        total: count(),
-      })
-      .from(messagesTable);
+    // --- New enquiries last 7 days (from metrics) ---
+    const today = new Date();
+    const sevenDaysAgo = new Date(today);
+    sevenDaysAgo.setDate(today.getDate() - 6);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split("T")[0];
 
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const weeklyConversations = await db
-      .select({
-        date: sql<string>`date_trunc('day', created_at)::date::text`,
-        count: count(),
-      })
-      .from(conversationsTable)
-      .where(gte(conversationsTable.createdAt, sevenDaysAgo))
-      .groupBy(sql`date_trunc('day', created_at)`)
-      .orderBy(sql`date_trunc('day', created_at)`);
-
-    const channelCounts = await db
-      .select({
-        channel: conversationsTable.channel,
-        count: count(),
-      })
-      .from(conversationsTable)
-      .groupBy(conversationsTable.channel);
-
-    const totalContacts = Number(contactStats?.total ?? 0);
-    const totalConvs = Number(convStats?.total ?? 0);
-    const buyers = Number(contactStats?.buyers ?? 0);
-    const renters = Number(contactStats?.renters ?? 0);
-    const landlordsVendors = Number(contactStats?.landlordsVendors ?? 0);
-    const hotLeads = Number(contactStats?.hotLeads ?? 0);
-
-    const leadsEngaged = Math.floor(totalContacts * 0.75);
-    const viewingsBooked = Math.floor(totalContacts * 0.2);
-    const reactivatedLeads = Math.floor(totalContacts * 0.1);
-    const referralLeads = Math.floor(totalContacts * 0.05);
-    const portalLeadsQualified = Math.floor(totalContacts * 0.3);
-    const leadsEngagedInstantly = Math.floor(leadsEngaged * 0.6);
-
-    const avgMinutesPerLead = 15;
-    const timeSavingsHours = (leadsEngagedInstantly * avgMinutesPerLead) / 60;
-    const costPerHour = 25;
-    const costSavingsGBP = timeSavingsHours * costPerHour;
+    const enquiriesByDay: Record<string, number> = {};
+    metricEvents
+      .filter((e) => e.event_type === "enquiry_received")
+      .forEach((e) => {
+        const day = (e.timestamp as string).split("T")[0];
+        if (day >= sevenDaysAgoStr) {
+          enquiriesByDay[day] = (enquiriesByDay[day] ?? 0) + 1;
+        }
+      });
 
     const newConversationsLastWeek: { date: string; count: number }[] = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      const found = weeklyConversations.find((r) => r.date === dateStr);
-      newConversationsLastWeek.push({ date: dateStr, count: found ? Number(found.count) : 0 });
+      newConversationsLastWeek.push({ date: dateStr, count: enquiriesByDay[dateStr] ?? 0 });
     }
 
-    const messagesByChannel = channelCounts.map((r) => ({
-      channel: r.channel,
-      count: Number(r.count),
-    }));
-
+    // --- Messages by channel (from conversations) ---
+    const channelMap: Record<string, number> = {};
+    conversations.forEach((c) => {
+      const ch: string = (c.channel as string) || "whatsapp";
+      channelMap[ch] = (channelMap[ch] ?? 0) + 1;
+    });
+    const messagesByChannel = Object.entries(channelMap).map(([channel, count]) => ({ channel, count }));
     if (messagesByChannel.length === 0) {
-      messagesByChannel.push(
-        { channel: "whatsapp", count: 0 },
-        { channel: "sms", count: 0 },
-        { channel: "email", count: 0 }
-      );
+      messagesByChannel.push({ channel: "whatsapp", count: 0 });
     }
 
+    // --- ROI ---
+    const timeSavingsHours = (leadsEngagedInstantly * 15) / 60;
+    const costSavingsGBP = timeSavingsHours * 25;
+
+    // --- Funnel ---
     const funnel = {
-      newLeads: totalContacts,
+      newLeads: customers.length,
       engaged: leadsEngaged,
       qualified: portalLeadsQualified,
       viewingsBooked,

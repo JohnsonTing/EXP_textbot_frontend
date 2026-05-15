@@ -1,8 +1,7 @@
 import { useGetDashboardMetrics } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  BarChart, Bar, Cell
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer
 } from "recharts";
 import {
   TrendingUp, Users, CalendarCheck, RefreshCw, Handshake, CheckCircle2,
@@ -105,10 +104,10 @@ export default function Dashboard() {
         </div>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+        <div className="grid grid-cols-1 gap-6">
+
           {/* Line Chart: Conversations over week */}
-          <Card className="col-span-1 lg:col-span-2 rounded-2xl border-border/50 shadow-md">
+          <Card className="rounded-2xl border-border/50 shadow-md">
             <CardContent className="p-6">
               <h3 className="font-display font-semibold mb-6 text-lg">New Conversations (Last 7 Days)</h3>
               <div className="h-[300px] w-full">
@@ -151,73 +150,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Bar Chart: Channels */}
-          <Card className="rounded-2xl border-border/50 shadow-md">
-            <CardContent className="p-6">
-              <h3 className="font-display font-semibold mb-6 text-lg">Messages by Channel</h3>
-              <div className="h-[300px] w-full">
-                {isLoading ? (
-                   <div className="w-full h-full bg-muted/20 animate-pulse rounded-xl" />
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={metrics?.messagesByChannel || []} layout="vertical" margin={{ top: 0, right: 0, bottom: 0, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="hsl(var(--border))" />
-                      <XAxis type="number" hide />
-                      <YAxis 
-                        type="category" 
-                        dataKey="channel" 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fontSize: 12, fill: 'hsl(var(--foreground))', fontWeight: 500 }} 
-                        width={80}
-                      />
-                      <RechartsTooltip cursor={{fill: 'hsl(var(--muted)/0.5)'}} contentStyle={{ borderRadius: '8px' }}/>
-                      <Bar dataKey="count" radius={[0, 8, 8, 0]} barSize={32}>
-                        {metrics?.messagesByChannel.map((entry, index) => {
-                          const colors = ['#22c55e', '#3b82f6', '#f97316'];
-                          return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
-                        })}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
         </div>
-
-        {/* Funnel */}
-        <Card className="rounded-2xl border-border/50 shadow-md overflow-hidden bg-gradient-to-br from-card to-muted/20">
-          <CardContent className="p-8">
-            <h3 className="font-display font-semibold mb-8 text-xl text-center">Conversion Funnel</h3>
-            
-            {isLoading || !metrics ? (
-               <div className="h-64 w-full bg-muted/20 animate-pulse rounded-xl" />
-            ) : (
-              <div className="max-w-4xl mx-auto flex flex-col items-center space-y-2">
-                {[
-                  { label: "New Leads", value: metrics.funnel.newLeads, color: "bg-blue-500", width: "100%" },
-                  { label: "Engaged", value: metrics.funnel.engaged, color: "bg-indigo-500", width: "85%" },
-                  { label: "Qualified", value: metrics.funnel.qualified, color: "bg-purple-500", width: "65%" },
-                  { label: "Viewings Booked", value: metrics.funnel.viewingsBooked, color: "bg-pink-500", width: "40%" },
-                  { label: "Offers Made", value: metrics.funnel.offers, color: "bg-rose-500", width: "25%" },
-                ].map((step, i) => (
-                  <div key={i} className="w-full flex flex-col items-center">
-                    <div 
-                      className={`h-14 ${step.color} rounded-lg flex items-center justify-between px-6 text-white font-medium shadow-md transition-all hover:scale-[1.02] cursor-default`}
-                      style={{ width: step.width }}
-                    >
-                      <span>{step.label}</span>
-                      <span className="font-bold text-lg">{step.value}</span>
-                    </div>
-                    {i < 4 && <div className="h-4 w-px bg-border/80 my-1"></div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
       </div>
     </Layout>

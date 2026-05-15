@@ -7,6 +7,7 @@ import {
   updateCustomer,
   deleteCustomer,
   mapDynamoToContact,
+  buildCustomerName,
   DynamoCustomer,
 } from "../lib/dynamodb";
 
@@ -21,7 +22,7 @@ router.get("/contacts", async (req, res) => {
       const q = search.toLowerCase();
       customers = customers.filter(
         (c) =>
-          (c.contact_name ?? "").toLowerCase().includes(q) ||
+          buildCustomerName(c).toLowerCase().includes(q) ||
           (c.phone ?? "").includes(q) ||
           (c.email ?? "").toLowerCase().includes(q)
       );

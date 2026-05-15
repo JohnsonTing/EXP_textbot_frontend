@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getGetConversationQueryKey } from "@workspace/api-client-react";
 import { Send, Phone, User, Search, MessageCircle, MoreVertical, MessageSquare, Mail, Home, BedDouble, PoundSterling, MapPin, Tag, Calendar, Bot, UserCheck } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { format } from "date-fns";
+import { format, isToday, isYesterday, isThisWeek } from "date-fns";
 import { Layout } from "@/components/layout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -120,6 +120,14 @@ export default function Conversations() {
         },
       }
     );
+  };
+
+  const formatConvTime = (ts: string) => {
+    const d = new Date(ts.endsWith("Z") || ts.includes("+") ? ts : ts + "Z");
+    if (isToday(d)) return format(d, "HH:mm");
+    if (isYesterday(d)) return "Yesterday";
+    if (isThisWeek(d, { weekStartsOn: 1 })) return format(d, "EEE");
+    return format(d, "dd/MM/yy");
   };
 
   const getChannelIcon = (channel: string) => {
@@ -342,7 +350,7 @@ export default function Conversations() {
                           )}
                         </div>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-1">
-                          {conv.lastMessageAt ? format(new Date(conv.lastMessageAt.endsWith("Z") || conv.lastMessageAt.includes("+") ? conv.lastMessageAt : conv.lastMessageAt + "Z"), "HH:mm") : ""}
+                          {conv.lastMessageAt ? formatConvTime(conv.lastMessageAt) : ""}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-2">

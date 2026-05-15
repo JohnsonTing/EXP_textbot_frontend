@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { getDynamoClient, AGENTS_TABLE } from "../lib/dynamodb";
-import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { getAgentByEmail } from "../lib/dynamodb";
 import { signToken } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -21,13 +20,8 @@ router.post("/auth/login", async (req, res) => {
     return;
   }
 
-  const client = getDynamoClient();
-  const result = await client.send(
-    new GetCommand({ TableName: AGENTS_TABLE, Key: { email: email.toLowerCase() } })
-  );
-
-  const agent = result.Item as { email: string; name: string; role: string; password_hash: string } | undefined;
-  if (!agent) {
+  const agent = await getAgentByEmail(email.toLowerCase());
+  if (!agent || !agent.password_hash) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
