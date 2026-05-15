@@ -128,7 +128,7 @@ export interface DynamoAgent {
   created_at: string;
 }
 
-export async function getAgent(email: string): Promise<DynamoAgent | null> {
+export async function getAgentByEmail(email: string): Promise<DynamoAgent | null> {
   const client = getDynamoClient();
   const resp = await client.send(new ScanCommand({
     TableName: AGENTS_TABLE,
