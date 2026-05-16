@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { randomUUID } from "crypto";
 import {
   scanAllConversationsByPhone,
   getMessagesByPhone,
@@ -62,7 +63,7 @@ router.get("/conversations", async (req, res) => {
       { name: string; phone: string; customerId: string; botPaused: boolean }
     > = {};
     for (const c of allCustomers) {
-      const ph = c.phone || c.customer_id;
+      const ph = c.phone;
       if (ph) {
         const name = buildCustomerName(c) !== "Unknown" ? buildCustomerName(c) : ph;
         customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id, botPaused: c.bot_paused ?? false };
@@ -89,7 +90,7 @@ router.get("/conversations", async (req, res) => {
 });
 
 const findCustomerByPhone = (customers: Awaited<ReturnType<typeof scanCustomers>>, phone: string) =>
-  customers.find((c) => c.phone === phone || c.customer_id === phone);
+  customers.find((c) => c.phone === phone);
 
 router.get("/conversations/:phone", async (req, res) => {
   try {
@@ -163,7 +164,7 @@ router.patch("/conversations/:phone/bot-mode", async (req, res) => {
     let customer = findCustomerByPhone(await scanCustomers(), phone);
     if (!customer) {
       const now = new Date().toISOString();
-      await putCustomer({ customer_id: phone, phone, created_at: now, updated_at: now, bot_paused: paused });
+      await putCustomer({ customer_id: randomUUID(), phone, created_at: now, updated_at: now, bot_paused: paused });
     } else {
       await updateCustomer(customer.customer_id, { bot_paused: paused });
     }

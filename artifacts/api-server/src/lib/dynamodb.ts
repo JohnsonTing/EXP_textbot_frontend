@@ -208,7 +208,7 @@ export function buildCustomerName(c: DynamoCustomer): string {
 
 export function mapDynamoToContact(c: DynamoCustomer) {
   const name = buildCustomerName(c);
-  const phone = nonEmpty(c.phone) ?? nonEmpty(c.customer_id) ?? "";
+  const phone = nonEmpty(c.phone) ?? "";
   return {
     id: c.customer_id,
     name,
