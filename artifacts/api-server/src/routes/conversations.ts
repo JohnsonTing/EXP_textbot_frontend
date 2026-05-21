@@ -8,7 +8,20 @@ import {
   putCustomer,
   buildCustomerName,
   type DynamoMessage,
+  type DynamoCustomer,
 } from "../lib/dynamodb";
+import type { Request } from "express";
+
+function filterCustomersByAgent(customers: DynamoCustomer[], req: Request): DynamoCustomer[] {
+  if (req.user?.role === "admin") return customers;
+  const agentId = req.user?.agent_id;
+  const agentEmail = req.user?.email;
+  return customers.filter((c) => {
+    if (agentId && c.responsible_agent_id && String(c.responsible_agent_id) === String(agentId)) return true;
+    if (c.responsible_agent_email === agentEmail) return true;
+    return false;
+  });
+}
 
 const router: IRouter = Router();
 
@@ -53,10 +66,12 @@ router.get("/conversations", async (req, res) => {
   try {
     const { search } = req.query as Record<string, string>;
 
-    const [grouped, allCustomers] = await Promise.all([
+    const [grouped, rawCustomers] = await Promise.all([
       scanAllConversationsByPhone(),
       scanCustomers(),
     ]);
+
+    const allCustomers = filterCustomersByAgent(rawCustomers, req);
 
     const customersByPhone: Record<
       string,
@@ -70,7 +85,12 @@ router.get("/conversations", async (req, res) => {
       }
     }
 
-    let result = buildConversationList(grouped, customersByPhone);
+    const agentPhones = new Set(Object.keys(customersByPhone));
+    const filteredGrouped = req.user?.role === "admin"
+      ? grouped
+      : Object.fromEntries(Object.entries(grouped).filter(([phone]) => agentPhones.has(phone)));
+
+    let result = buildConversationList(filteredGrouped, customersByPhone);
 
     if (search) {
       const q = search.toLowerCase();
@@ -102,6 +122,15 @@ router.get("/conversations/:phone", async (req, res) => {
     ]);
 
     const customer = findCustomerByPhone(allCustomers, phone);
+
+    if (req.user?.role !== "admin") {
+      const agentCustomers = filterCustomersByAgent(allCustomers, req);
+      const owned = agentCustomers.some((c) => c.phone === phone);
+      if (!owned) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    }
 
     const sorted = [...messages].sort(
       (a, b) =>
