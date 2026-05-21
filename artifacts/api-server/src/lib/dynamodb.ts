@@ -40,6 +40,7 @@ export interface DynamoCustomer {
   property_in_mind?: string;
   responsible_agent_email?: string;
   responsible_agent_id?: string;
+  responsible_agent_name?: string;
   scraped_listings?: string;
   status?: string;
   summary?: string;

@@ -17,6 +17,16 @@ router.get("/contacts", async (req, res) => {
     const { search, tag, leadIntent } = req.query as Record<string, string>;
     let customers = await scanCustomers();
 
+    if (req.user?.role !== "admin") {
+      const agentId = req.user!.agent_id;
+      const agentEmail = req.user!.email;
+      customers = customers.filter((c) => {
+        if (agentId && c.responsible_agent_id && String(c.responsible_agent_id) === String(agentId)) return true;
+        if (c.responsible_agent_email === agentEmail) return true;
+        return false;
+      });
+    }
+
     if (search) {
       const q = search.toLowerCase();
       customers = customers.filter(
@@ -60,6 +70,9 @@ router.post("/contacts", async (req, res) => {
       enquiry_bedrooms: body.bedrooms ?? undefined,
       enquiry_max_price: body.budget ? parseInt(body.budget.replace(/[^0-9]/g, "")) || undefined : undefined,
       status: "active",
+      responsible_agent_id: req.user?.agent_id,
+      responsible_agent_email: req.user?.email,
+      responsible_agent_name: req.user?.name,
       created_at: now,
       updated_at: now,
     };

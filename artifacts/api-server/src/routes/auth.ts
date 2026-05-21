@@ -32,7 +32,7 @@ router.post("/auth/login", async (req, res) => {
     return;
   }
 
-  const token = signToken({ email: agent.email, name: agent.name, role: agent.role });
+  const token = signToken({ email: agent.email, name: agent.name, role: agent.role, agent_id: agent.agent_id });
   res.cookie("token", token, COOKIE_OPTS);
   res.json({ email: agent.email, name: agent.name, role: agent.role });
 });
