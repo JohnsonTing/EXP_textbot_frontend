@@ -1,17 +1,48 @@
-import { useGetDashboardMetrics } from "@workspace/api-client-react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer
 } from "recharts";
 import {
   TrendingUp, Users, CalendarCheck, RefreshCw, Handshake, CheckCircle2,
-  Home, Key
+  Home, Key, MessageCircle
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, subDays } from "date-fns";
+
+const PERIODS = [
+  { label: "All Time", value: "all" },
+  { label: "Last 7 Days", value: "7d" },
+  { label: "Last 30 Days", value: "30d" },
+  { label: "Last 3 Months", value: "90d" },
+] as const;
+
+type Period = typeof PERIODS[number]["value"];
+
+function sinceFromPeriod(period: Period): string | null {
+  if (period === "all") return null;
+  const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+  return subDays(new Date(), days).toISOString();
+}
+
+function useDashboardMetrics(period: Period) {
+  const since = sinceFromPeriod(period);
+  const url = since ? `/api/dashboard/metrics?since=${encodeURIComponent(since)}` : "/api/dashboard/metrics";
+  return useQuery({
+    queryKey: ["dashboard-metrics", period],
+    queryFn: async () => {
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch metrics");
+      return res.json();
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+}
 
 export default function Dashboard() {
-  const { data: metrics, isLoading } = useGetDashboardMetrics();
+  const [period, setPeriod] = useState<Period>("all");
+  const { data: metrics, isLoading } = useDashboardMetrics(period);
 
   const renderMetricCard = (title: string, value: string | number, icon: React.ReactNode, trend?: string, color: string = "text-primary", bg: string = "bg-primary/10") => (
     <Card className="rounded-2xl border-border/50 shadow-lg shadow-black/5 hover:shadow-xl transition-all duration-300 group overflow-hidden relative">
@@ -42,11 +73,26 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="p-6 md:p-8 max-w-[1600px] mx-auto space-y-8">
-        
+
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground">Analytics Dashboard</h1>
             <p className="text-muted-foreground mt-1">Track bot performance, lead conversion, and ROI.</p>
+          </div>
+          <div className="flex items-center gap-1 bg-muted/50 rounded-xl p-1 border border-border/50">
+            {PERIODS.map((p) => (
+              <button
+                key={p.value}
+                onClick={() => setPeriod(p.value)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  period === p.value
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -58,7 +104,7 @@ export default function Dashboard() {
         </div>
 
         {/* CRM Pipeline Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <Card className="rounded-xl border-border/50 bg-card/50">
             <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
               <Users className="text-primary mb-2 opacity-80" size={20} />
@@ -75,20 +121,6 @@ export default function Dashboard() {
           </Card>
           <Card className="rounded-xl border-border/50 bg-card/50">
             <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-              <RefreshCw className="text-blue-500 mb-2 opacity-80" size={20} />
-              <p className="text-2xl font-bold">{metrics?.reactivatedLeads || 0}</p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Reactivated</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-xl border-border/50 bg-card/50">
-            <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-              <Handshake className="text-pink-500 mb-2 opacity-80" size={20} />
-              <p className="text-2xl font-bold">{metrics?.referralLeads || 0}</p>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Referrals</p>
-            </CardContent>
-          </Card>
-          <Card className="rounded-xl border-border/50 bg-card/50">
-            <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
               <Home className="text-indigo-500 mb-2 opacity-80" size={20} />
               <p className="text-2xl font-bold">{metrics?.buyers || 0}</p>
               <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Buyers</p>
@@ -99,6 +131,13 @@ export default function Dashboard() {
               <Key className="text-orange-500 mb-2 opacity-80" size={20} />
               <p className="text-2xl font-bold">{metrics?.renters || 0}</p>
               <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Renters</p>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl border-border/50 bg-card/50">
+            <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
+              <MessageCircle className="text-violet-500 mb-2 opacity-80" size={20} />
+              <p className="text-2xl font-bold">{metrics?.reengagedLeads || 0}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mt-1">Reengaged</p>
             </CardContent>
           </Card>
         </div>
@@ -117,28 +156,28 @@ export default function Dashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={metrics?.newConversationsLastWeek || []} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                      <XAxis 
-                        dataKey="date" 
+                      <XAxis
+                        dataKey="date"
                         tickFormatter={(val) => format(parseISO(val), 'MMM d')}
                         axisLine={false}
                         tickLine={false}
                         tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                         dy={10}
                       />
-                      <YAxis 
+                      <YAxis
                         axisLine={false}
                         tickLine={false}
                         tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
                         dx={-10}
                       />
-                      <RechartsTooltip 
+                      <RechartsTooltip
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                         labelFormatter={(val) => format(parseISO(val), 'MMMM d, yyyy')}
                       />
-                      <Line 
-                        type="monotone" 
-                        dataKey="count" 
-                        stroke="hsl(var(--primary))" 
+                      <Line
+                        type="monotone"
+                        dataKey="count"
+                        stroke="hsl(var(--primary))"
                         strokeWidth={4}
                         dot={{ r: 4, fill: 'hsl(var(--primary))', strokeWidth: 2, stroke: '#fff' }}
                         activeDot={{ r: 8, strokeWidth: 0 }}

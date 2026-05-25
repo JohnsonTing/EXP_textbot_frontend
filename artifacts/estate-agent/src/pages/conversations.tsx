@@ -360,9 +360,9 @@ export default function Conversations() {
                             ? conv.lastMessage.substring(0, 60) + (conv.lastMessage.length > 60 ? "…" : "")
                             : "No messages yet"}
                         </p>
-                        {"messageCount" in conv && (conv.messageCount as number) > 0 && (
-                          <span className="bg-primary/10 text-primary text-[10px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                            {conv.messageCount as number}
+                        {activePhone !== conv.id && (conv.unreadCount ?? 0) > 0 && (
+                          <span className="bg-destructive text-destructive-foreground text-[10px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                            {conv.unreadCount}
                           </span>
                         )}
                       </div>
