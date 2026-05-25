@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { getAgentByEmail } from "../lib/dynamodb";
-import { signToken } from "../lib/auth";
+import { signToken, verifyToken } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -35,6 +35,20 @@ router.post("/auth/login", async (req, res) => {
   const token = signToken({ email: agent.email, name: agent.name, role: agent.role, agent_id: agent.agent_id });
   res.cookie("token", token, COOKIE_OPTS);
   res.json({ email: agent.email, name: agent.name, role: agent.role });
+});
+
+router.get("/auth/me", (req, res) => {
+  const token = req.cookies?.token;
+  if (!token) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  try {
+    const payload = verifyToken(token);
+    res.json({ email: payload.email, name: payload.name, role: payload.role });
+  } catch {
+    res.status(401).json({ error: "Unauthorized" });
+  }
 });
 
 router.post("/auth/logout", (_req, res) => {

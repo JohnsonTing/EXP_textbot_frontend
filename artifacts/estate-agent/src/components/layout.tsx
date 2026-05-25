@@ -34,9 +34,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [profileOpen, setProfileOpen] = useState(false);
 
   const navItems = [
+    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { href: "/", icon: MessageSquare, label: "Conversations" },
     { href: "/contacts", icon: Users, label: "Contacts" },
-    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   ];
 
   return (

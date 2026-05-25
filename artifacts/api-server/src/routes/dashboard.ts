@@ -20,11 +20,20 @@ const router: IRouter = Router();
 
 router.get("/dashboard/metrics", async (req, res) => {
   try {
-    const [customers, metricEvents, conversations] = await Promise.all([
+    const since = typeof req.query.since === "string" ? req.query.since : null;
+
+    const [allCustomers, allMetricEvents, conversations] = await Promise.all([
       fullScan(CUSTOMERS_TABLE),
       fullScan(METRICS_TABLE),
       fullScan(CONVERSATIONS_TABLE),
     ]);
+
+    const customers = since
+      ? allCustomers.filter((c) => typeof c.created_at === "string" && c.created_at >= since)
+      : allCustomers;
+    const metricEvents = since
+      ? allMetricEvents.filter((e) => typeof e.timestamp === "string" && e.timestamp >= since)
+      : allMetricEvents;
 
     // --- Customers ---
     const buyers = customers.filter((c) => c.customer_type === "buyer").length;
@@ -62,12 +71,18 @@ router.get("/dashboard/metrics", async (req, res) => {
         .filter((e) => e.event_type === "lead_reactivated")
         .map((e) => e.customer_id)
     );
+    const reengagedCustomers = new Set(
+      metricEvents
+        .filter((e) => e.event_type === "reengagement_sent")
+        .map((e) => e.customer_id)
+    );
 
     const leadsEngaged = enquiryCustomers.size;
     const leadsEngagedInstantly = instantCustomers.size;
     const viewingsBooked = viewingCustomers.size;
     const referralLeads = referralCustomers.size;
     const reactivatedLeads = reactivatedCustomers.size;
+    const reengagedLeads = reengagedCustomers.size;
 
     // --- New enquiries last 7 days (from metrics) ---
     const today = new Date();
@@ -122,6 +137,7 @@ router.get("/dashboard/metrics", async (req, res) => {
       leadsEngagedInstantly,
       viewingsBooked,
       reactivatedLeads,
+      reengagedLeads,
       referralLeads,
       portalLeadsQualified,
       hotLeads,

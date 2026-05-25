@@ -40,6 +40,16 @@ function buildConversationList(
       );
       const last = sorted[sorted.length - 1];
       const customer = customers[phone];
+
+      // Count inbound (customer) messages after the last outbound (agent/bot) message
+      let lastOutboundIdx = -1;
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        if (sorted[i].role !== "user") { lastOutboundIdx = i; break; }
+      }
+      const unreadCount = sorted
+        .slice(lastOutboundIdx + 1)
+        .filter((m) => m.role === "user").length;
+
       return {
         id: phone,
         contactId: customer?.customerId ?? phone,
@@ -50,7 +60,7 @@ function buildConversationList(
         botPaused: customer?.botPaused ?? false,
         lastMessage: last?.message ?? null,
         lastMessageAt: last?.timestamp ?? null,
-        unreadCount: 0,
+        unreadCount,
         createdAt: sorted[0]?.timestamp ?? new Date().toISOString(),
         messageCount: messages.length,
       };
