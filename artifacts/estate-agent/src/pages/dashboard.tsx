@@ -9,6 +9,9 @@ import {
   Home, Key, MessageCircle
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { format, parseISO, subDays } from "date-fns";
 
 const PERIODS = [
@@ -19,6 +22,15 @@ const PERIODS = [
 ] as const;
 
 type Period = typeof PERIODS[number]["value"];
+
+interface MetricDetailEntry {
+  customerId: string;
+  name: string;
+  phone: string | null;
+  property: string | null;
+  metadata: Record<string, unknown> | null;
+  timestamp: string;
+}
 
 function sinceFromPeriod(period: Period): string | null {
   if (period === "all") return null;
@@ -43,9 +55,13 @@ function useDashboardMetrics(period: Period) {
 export default function Dashboard() {
   const [period, setPeriod] = useState<Period>("all");
   const { data: metrics, isLoading } = useDashboardMetrics(period);
+  const [detailDialog, setDetailDialog] = useState<"referral" | "viewing" | null>(null);
 
-  const renderMetricCard = (title: string, value: string | number, icon: React.ReactNode, trend?: string, color: string = "text-primary", bg: string = "bg-primary/10") => (
-    <Card className="rounded-2xl border-border/50 shadow-lg shadow-black/5 hover:shadow-xl transition-all duration-300 group overflow-hidden relative">
+  const renderMetricCard = (title: string, value: string | number, icon: React.ReactNode, trend?: string, color: string = "text-primary", bg: string = "bg-primary/10", onClick?: () => void) => (
+    <Card
+      onClick={onClick}
+      className={`rounded-2xl border-border/50 shadow-lg shadow-black/5 hover:shadow-xl transition-all duration-300 group overflow-hidden relative ${onClick ? "cursor-pointer" : ""}`}
+    >
       <div className="absolute top-0 right-0 p-4 opacity-10 transform translate-x-4 -translate-y-4 group-hover:scale-110 transition-transform duration-500">
         {icon}
       </div>
@@ -64,11 +80,52 @@ export default function Dashboard() {
           <h3 className="text-3xl font-display font-bold text-foreground mb-1">
             {isLoading ? <div className="h-8 w-20 bg-muted animate-pulse rounded" /> : value}
           </h3>
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="text-sm font-medium text-muted-foreground">
+            {title}
+            {onClick && <span className="ml-1 underline decoration-dotted underline-offset-2">view list</span>}
+          </p>
         </div>
       </CardContent>
     </Card>
   );
+
+  const renderDetailList = (entries: MetricDetailEntry[] | undefined) => {
+    if (!entries || entries.length === 0) {
+      return <p className="text-sm text-muted-foreground py-6 text-center">No records for this period.</p>;
+    }
+    return (
+      <div className="max-h-[60vh] overflow-y-auto -mx-6 px-6 divide-y divide-border/50">
+        {entries.map((e) => (
+          <div key={e.customerId} className="py-3 flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="font-medium text-foreground truncate">{e.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {[e.phone, e.property].filter(Boolean).join(" · ") || "—"}
+              </p>
+              {e.metadata?.referred_to_agent_email ? (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Referred to {String(e.metadata.referred_to_agent_email)}
+                </p>
+              ) : null}
+              {e.metadata?.property_url ? (
+                <a
+                  href={String(e.metadata.property_url)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-primary hover:underline mt-0.5 block truncate"
+                >
+                  {String(e.metadata.property_url)}
+                </a>
+              ) : null}
+            </div>
+            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+              {e.timestamp ? format(parseISO(e.timestamp), "MMM d, yyyy") : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <Layout>
@@ -98,8 +155,8 @@ export default function Dashboard() {
 
         {/* Top High-Impact Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {renderMetricCard("Referrals", metrics?.referralLeads || 0, <Handshake size={24} />, undefined, "text-pink-600", "bg-pink-100")}
-          {renderMetricCard("Viewings Booked", metrics?.viewingsBooked || 0, <CalendarCheck size={24} />, undefined, "text-blue-600", "bg-blue-100")}
+          {renderMetricCard("Referrals", metrics?.referralLeads || 0, <Handshake size={24} />, undefined, "text-pink-600", "bg-pink-100", () => setDetailDialog("referral"))}
+          {renderMetricCard("Viewings Booked", metrics?.viewingsBooked || 0, <CalendarCheck size={24} />, undefined, "text-blue-600", "bg-blue-100", () => setDetailDialog("viewing"))}
           {renderMetricCard("Reactivated", metrics?.reactivatedLeads || 0, <RefreshCw size={24} />, undefined, "text-indigo-600", "bg-indigo-100")}
         </div>
 
@@ -192,6 +249,22 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      <Dialog open={detailDialog !== null} onOpenChange={(open) => !open && setDetailDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {detailDialog === "referral" ? "Referrals" : "Viewings Booked"}
+            </DialogTitle>
+            <DialogDescription>
+              {detailDialog === "referral"
+                ? "Leads referred to another agent in this period."
+                : "Leads who booked a property viewing in this period."}
+            </DialogDescription>
+          </DialogHeader>
+          {renderDetailList(detailDialog === "referral" ? metrics?.referralLeadsList : metrics?.viewingsBookedList)}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }
