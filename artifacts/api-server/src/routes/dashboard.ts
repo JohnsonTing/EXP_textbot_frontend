@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getDynamoClient, CUSTOMERS_TABLE, CONVERSATIONS_TABLE } from "../lib/dynamodb";
+import { getDynamoClient, CUSTOMERS_TABLE, CONVERSATIONS_TABLE, buildCustomerName, DynamoCustomer } from "../lib/dynamodb";
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 
 const METRICS_TABLE = "EXP_agent_metrics";
@@ -14,6 +14,42 @@ async function fullScan(tableName: string): Promise<Record<string, unknown>[]> {
     lastKey = resp.LastEvaluatedKey as Record<string, unknown> | undefined;
   } while (lastKey);
   return items;
+}
+
+// Metric event timestamps are composite sort keys ("<iso>#<hash>") — strip the hash for display/sorting.
+function eventTimestamp(e: Record<string, unknown>): string {
+  return typeof e.timestamp === "string" ? e.timestamp.split("#")[0] : "";
+}
+
+function detailListFromEvents(
+  events: Record<string, unknown>[],
+  customersById: Map<string, DynamoCustomer>,
+  customersByPhone: Map<string, DynamoCustomer>
+) {
+  const latestByCustomer = new Map<string, { event: Record<string, unknown>; timestamp: string }>();
+  for (const e of events) {
+    const customerId = e.customer_id as string;
+    if (!customerId) continue;
+    const timestamp = eventTimestamp(e);
+    const existing = latestByCustomer.get(customerId);
+    if (!existing || timestamp > existing.timestamp) {
+      latestByCustomer.set(customerId, { event: e, timestamp });
+    }
+  }
+  return Array.from(latestByCustomer.entries())
+    .map(([customerId, { event, timestamp }]) => {
+      // Older metric events stored the customer's phone number as customer_id, from before the UUID migration.
+      const c = customersById.get(customerId) ?? customersByPhone.get(customerId);
+      return {
+        customerId,
+        name: c ? buildCustomerName(c) : "Unknown",
+        phone: c?.phone ?? null,
+        property: c?.property_in_mind ?? c?.enquiry_prop_type ?? null,
+        metadata: (event.metadata as Record<string, unknown>) ?? null,
+        timestamp,
+      };
+    })
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 
 const router: IRouter = Router();
@@ -56,16 +92,10 @@ router.get("/dashboard/metrics", async (req, res) => {
         .filter((e) => e.event_type === "first_message_sent")
         .map((e) => e.customer_id)
     );
-    const viewingCustomers = new Set(
-      metricEvents
-        .filter((e) => e.event_type === "viewing_booked")
-        .map((e) => e.customer_id)
-    );
-    const referralCustomers = new Set(
-      metricEvents
-        .filter((e) => e.event_type === "referral")
-        .map((e) => e.customer_id)
-    );
+    const viewingEvents = metricEvents.filter((e) => e.event_type === "viewing_booked");
+    const viewingCustomers = new Set(viewingEvents.map((e) => e.customer_id));
+    const referralEvents = metricEvents.filter((e) => e.event_type === "referral");
+    const referralCustomers = new Set(referralEvents.map((e) => e.customer_id));
     const reactivatedCustomers = new Set(
       metricEvents
         .filter((e) => e.event_type === "lead_reactivated")
@@ -83,6 +113,15 @@ router.get("/dashboard/metrics", async (req, res) => {
     const referralLeads = referralCustomers.size;
     const reactivatedLeads = reactivatedCustomers.size;
     const reengagedLeads = reengagedCustomers.size;
+
+    const customersById = new Map(allCustomers.map((c) => [c.customer_id as string, c as unknown as DynamoCustomer]));
+    const customersByPhone = new Map(
+      allCustomers
+        .filter((c) => typeof c.phone === "string" && c.phone)
+        .map((c) => [c.phone as string, c as unknown as DynamoCustomer])
+    );
+    const viewingsBookedList = detailListFromEvents(viewingEvents, customersById, customersByPhone);
+    const referralLeadsList = detailListFromEvents(referralEvents, customersById, customersByPhone);
 
     // --- New enquiries last 7 days (from metrics) ---
     const today = new Date();
@@ -139,6 +178,8 @@ router.get("/dashboard/metrics", async (req, res) => {
       reactivatedLeads,
       reengagedLeads,
       referralLeads,
+      referralLeadsList,
+      viewingsBookedList,
       portalLeadsQualified,
       hotLeads,
       buyers,
