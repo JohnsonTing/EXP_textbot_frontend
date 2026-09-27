@@ -92,10 +92,33 @@ router.get("/dashboard/metrics", async (req, res) => {
         .filter((e) => e.event_type === "first_message_sent")
         .map((e) => e.customer_id)
     );
+    const customersById = new Map(allCustomers.map((c) => [c.customer_id as string, c as unknown as DynamoCustomer]));
+    const customersByPhone = new Map(
+      allCustomers
+        .filter((c) => typeof c.phone === "string" && c.phone)
+        .map((c) => [c.phone as string, c as unknown as DynamoCustomer])
+    );
+
     const viewingEvents = metricEvents.filter((e) => e.event_type === "viewing_booked");
     const viewingCustomers = new Set(viewingEvents.map((e) => e.customer_id));
-    const referralEvents = metricEvents.filter((e) => e.event_type === "referral");
+
+    // A referral back to the lead's own responsible agent is the bot pointing them at that agent's
+    // other properties, not a hand-off to another agent — count those separately.
+    const isOwnPropertyReferral = (e: Record<string, unknown>) => {
+      const referredTo = (e.metadata as Record<string, unknown> | undefined)?.referred_to_agent_email;
+      const customerId = e.customer_id as string;
+      const c = customersById.get(customerId) ?? customersByPhone.get(customerId);
+      return (
+        typeof referredTo === "string" &&
+        !!c?.responsible_agent_email &&
+        referredTo.trim().toLowerCase() === c.responsible_agent_email.trim().toLowerCase()
+      );
+    };
+    const allReferralEvents = metricEvents.filter((e) => e.event_type === "referral");
+    const referralEvents = allReferralEvents.filter((e) => !isOwnPropertyReferral(e));
+    const ownPropertyReferralEvents = allReferralEvents.filter(isOwnPropertyReferral);
     const referralCustomers = new Set(referralEvents.map((e) => e.customer_id));
+    const ownPropertyReferralCustomers = new Set(ownPropertyReferralEvents.map((e) => e.customer_id));
     const reactivatedCustomers = new Set(
       metricEvents
         .filter((e) => e.event_type === "lead_reactivated")
@@ -107,21 +130,37 @@ router.get("/dashboard/metrics", async (req, res) => {
         .map((e) => e.customer_id)
     );
 
+    // Referrals of either kind that came after the lead's first reengagement message. The reengagement
+    // itself may predate the selected period, so look it up across all events.
+    const firstReengagementByCustomer = new Map<string, string>();
+    for (const e of allMetricEvents) {
+      if (e.event_type !== "reengagement_sent") continue;
+      const customerId = e.customer_id as string;
+      const timestamp = eventTimestamp(e);
+      const existing = firstReengagementByCustomer.get(customerId);
+      if (customerId && timestamp && (!existing || timestamp < existing)) {
+        firstReengagementByCustomer.set(customerId, timestamp);
+      }
+    }
+    const reengagementReferralEvents = allReferralEvents.filter((e) => {
+      const reengagedAt = firstReengagementByCustomer.get(e.customer_id as string);
+      return !!reengagedAt && eventTimestamp(e) > reengagedAt;
+    });
+    const reengagementReferralCustomers = new Set(reengagementReferralEvents.map((e) => e.customer_id));
+
     const leadsEngaged = enquiryCustomers.size;
     const leadsEngagedInstantly = instantCustomers.size;
     const viewingsBooked = viewingCustomers.size;
     const referralLeads = referralCustomers.size;
+    const ownPropertyReferralLeads = ownPropertyReferralCustomers.size;
     const reactivatedLeads = reactivatedCustomers.size;
     const reengagedLeads = reengagedCustomers.size;
+    const reengagementReferralLeads = reengagementReferralCustomers.size;
 
-    const customersById = new Map(allCustomers.map((c) => [c.customer_id as string, c as unknown as DynamoCustomer]));
-    const customersByPhone = new Map(
-      allCustomers
-        .filter((c) => typeof c.phone === "string" && c.phone)
-        .map((c) => [c.phone as string, c as unknown as DynamoCustomer])
-    );
     const viewingsBookedList = detailListFromEvents(viewingEvents, customersById, customersByPhone);
     const referralLeadsList = detailListFromEvents(referralEvents, customersById, customersByPhone);
+    const ownPropertyReferralLeadsList = detailListFromEvents(ownPropertyReferralEvents, customersById, customersByPhone);
+    const reengagementReferralLeadsList = detailListFromEvents(reengagementReferralEvents, customersById, customersByPhone);
 
     // --- New enquiries last 7 days (from metrics) ---
     const today = new Date();
@@ -179,6 +218,10 @@ router.get("/dashboard/metrics", async (req, res) => {
       reengagedLeads,
       referralLeads,
       referralLeadsList,
+      ownPropertyReferralLeads,
+      ownPropertyReferralLeadsList,
+      reengagementReferralLeads,
+      reengagementReferralLeadsList,
       viewingsBookedList,
       portalLeadsQualified,
       hotLeads,
