@@ -161,6 +161,10 @@ export interface DynamoMessage {
   message: string;
   role: string;
   timestamp: string;
+  // Set by the bot from 2026-09: 'customer' | 'chloe' | 'agent'. Older rows lack it.
+  sender?: string;
+  sender_agent_id?: string;
+  sender_name?: string;
 }
 
 export async function scanAllConversationsByPhone(): Promise<Record<string, DynamoMessage[]>> {

@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   TrendingUp, Users, CalendarCheck, RefreshCw, Handshake, CheckCircle2,
-  Home, Key, MessageCircle
+  Home, Key, MessageCircle, Building2, Repeat
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -32,6 +32,31 @@ interface MetricDetailEntry {
   timestamp: string;
 }
 
+type DetailDialogKind = "referral" | "ownPropertyReferral" | "reengagementReferral" | "viewing";
+
+const DETAIL_DIALOGS: Record<DetailDialogKind, { title: string; description: string; listKey: string }> = {
+  referral: {
+    title: "Referrals",
+    description: "Leads referred to another agent in this period.",
+    listKey: "referralLeadsList",
+  },
+  ownPropertyReferral: {
+    title: "Other Property Referrals",
+    description: "Leads the bot pointed to your other properties in this period.",
+    listKey: "ownPropertyReferralLeadsList",
+  },
+  reengagementReferral: {
+    title: "Booked from Reengagement",
+    description: "Reengaged leads who were then referred to another agent or to your other properties in this period.",
+    listKey: "reengagementReferralLeadsList",
+  },
+  viewing: {
+    title: "Viewings Booked",
+    description: "Leads who booked a property viewing in this period.",
+    listKey: "viewingsBookedList",
+  },
+};
+
 function sinceFromPeriod(period: Period): string | null {
   if (period === "all") return null;
   const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
@@ -55,7 +80,7 @@ function useDashboardMetrics(period: Period) {
 export default function Dashboard() {
   const [period, setPeriod] = useState<Period>("all");
   const { data: metrics, isLoading } = useDashboardMetrics(period);
-  const [detailDialog, setDetailDialog] = useState<"referral" | "viewing" | null>(null);
+  const [detailDialog, setDetailDialog] = useState<DetailDialogKind | null>(null);
 
   const renderMetricCard = (title: string, value: string | number, icon: React.ReactNode, trend?: string, color: string = "text-primary", bg: string = "bg-primary/10", onClick?: () => void) => (
     <Card
@@ -154,8 +179,10 @@ export default function Dashboard() {
         </div>
 
         {/* Top High-Impact Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6">
           {renderMetricCard("Referrals", metrics?.referralLeads || 0, <Handshake size={24} />, undefined, "text-pink-600", "bg-pink-100", () => setDetailDialog("referral"))}
+          {renderMetricCard("Other Property Referrals", metrics?.ownPropertyReferralLeads || 0, <Building2 size={24} />, undefined, "text-amber-600", "bg-amber-100", () => setDetailDialog("ownPropertyReferral"))}
+          {renderMetricCard("Booked from Reengagement", metrics?.reengagementReferralLeads || 0, <Repeat size={24} />, undefined, "text-emerald-600", "bg-emerald-100", () => setDetailDialog("reengagementReferral"))}
           {renderMetricCard("Viewings Booked", metrics?.viewingsBooked || 0, <CalendarCheck size={24} />, undefined, "text-blue-600", "bg-blue-100", () => setDetailDialog("viewing"))}
           {renderMetricCard("Reactivated", metrics?.reactivatedLeads || 0, <RefreshCw size={24} />, undefined, "text-indigo-600", "bg-indigo-100")}
         </div>
@@ -253,16 +280,10 @@ export default function Dashboard() {
       <Dialog open={detailDialog !== null} onOpenChange={(open) => !open && setDetailDialog(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {detailDialog === "referral" ? "Referrals" : "Viewings Booked"}
-            </DialogTitle>
-            <DialogDescription>
-              {detailDialog === "referral"
-                ? "Leads referred to another agent in this period."
-                : "Leads who booked a property viewing in this period."}
-            </DialogDescription>
+            <DialogTitle>{detailDialog && DETAIL_DIALOGS[detailDialog].title}</DialogTitle>
+            <DialogDescription>{detailDialog && DETAIL_DIALOGS[detailDialog].description}</DialogDescription>
           </DialogHeader>
-          {renderDetailList(detailDialog === "referral" ? metrics?.referralLeadsList : metrics?.viewingsBookedList)}
+          {renderDetailList(detailDialog ? metrics?.[DETAIL_DIALOGS[detailDialog].listKey] : undefined)}
         </DialogContent>
       </Dialog>
     </Layout>

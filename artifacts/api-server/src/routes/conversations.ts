@@ -153,8 +153,13 @@ router.get("/conversations/:phone", async (req, res) => {
       direction: m.role === "user" ? "inbound" : "outbound",
       content: m.message,
       role: m.role,
+      sender: m.sender ?? (m.role === "user" ? "customer" : "chloe"),
       senderName:
-        m.role === "user" ? (customer ? buildCustomerName(customer) : phone) : "Assistant",
+        m.role === "user"
+          ? (customer ? buildCustomerName(customer) : phone)
+          : m.sender === "agent"
+            ? (m.sender_name || "Agent")
+            : "Chloe",
       sentAt: m.timestamp,
     }));
 
@@ -214,8 +219,14 @@ router.patch("/conversations/:phone/bot-mode", async (req, res) => {
   }
 });
 
+// Bot's /send route and the shared secret it checks (X-Bot-Key). Set both in
+// the host's environment; the URL falls back to the live bot so an unset env
+// doesn't break sending. Without BOT_API_KEY the bot will refuse once it
+// enforces auth (AuthEnforce=true).
 const LAMBDA_SEND_URL =
+  process.env.BOT_SEND_URL ||
   "https://jpdrrnrnot2pslmpq4vcxatsey0ofvud.lambda-url.us-east-1.on.aws/send";
+const BOT_API_KEY = process.env.BOT_API_KEY || "";
 
 router.post("/conversations/:phone/messages", async (req, res) => {
   try {
@@ -227,18 +238,28 @@ router.post("/conversations/:phone/messages", async (req, res) => {
       return;
     }
 
+    // Same ownership rule as GET /conversations/:phone — agents may only
+    // message their own customers; admin may message anyone.
+    if (req.user?.role !== "admin") {
+      const owned = filterCustomersByAgent(await scanCustomers(), req).some((c) => c.phone === phone);
+      if (!owned) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    }
+
     const lambdaPayload = JSON.stringify({
       phone: `${phone}`,
       message: content.trim(),
+      agent_id: req.user?.agent_id ?? "",
+      agent_name: req.user?.name ?? "",
     });
-    req.log.info(
-      { url: LAMBDA_SEND_URL, payload: lambdaPayload },
-      "Sending to Lambda",
-    );
+    req.log.info({ phone, agent: req.user?.email }, "Sending to Lambda");
+    if (!BOT_API_KEY) req.log.warn("BOT_API_KEY not set — bot will reject /send once AuthEnforce=true");
 
     const lambdaRes = await fetch(LAMBDA_SEND_URL, {
       method: "POST",
-      //headers: { "Content-Type": "application/json" },
+      headers: BOT_API_KEY ? { "X-Bot-Key": BOT_API_KEY } : {},
       body: lambdaPayload,
     });
 
@@ -269,9 +290,10 @@ router.post("/conversations/:phone/messages", async (req, res) => {
       id: `local-${Date.now()}`,
       conversationId: phone,
       direction: "outbound",
-      role: "user",
+      role: "assistant",
+      sender: "agent",
       content: content.trim(),
-      senderName: "Agent",
+      senderName: req.user?.name || "Agent",
       sentAt: now,
     });
   } catch (err) {

@@ -112,9 +112,9 @@ export default function Conversations() {
       id: `optimistic-${Date.now()}`,
       conversationId: activePhone,
       direction: "outbound",
-      role: "user",
+      role: "assistant",
       content: text,
-      senderName: "Agent",
+      senderName: "You",
       sentAt: new Date().toISOString(),
     };
     setOptimisticMessages((prev) => [...prev, optimistic]);
@@ -483,6 +483,7 @@ export default function Conversations() {
                               </ReactMarkdown>
                             </div>
                             <div className={`text-[10px] mt-1.5 text-right opacity-60 ${isOutbound ? "text-primary-foreground" : "text-muted-foreground"}`}>
+                              {isOutbound && msg.senderName ? `${msg.senderName} · ` : ""}
                               {format(msgDate, "HH:mm")}
                             </div>
                           </div>
