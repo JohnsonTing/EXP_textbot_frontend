@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend
 } from "recharts";
 import {
   TrendingUp, Users, CalendarCheck, RefreshCw, Handshake, CheckCircle2,
-  Home, Key, MessageCircle, Building2, Repeat
+  Home, Key, MessageCircle, Building2, Repeat, Mail, MessageSquare, UserPlus
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -32,7 +32,7 @@ interface MetricDetailEntry {
   timestamp: string;
 }
 
-type DetailDialogKind = "referral" | "ownPropertyReferral" | "reengagementReferral" | "viewing";
+type DetailDialogKind = "referral" | "ownPropertyReferral" | "reengagementReferral" | "viewing" | "emailHandover";
 
 const DETAIL_DIALOGS: Record<DetailDialogKind, { title: string; description: string; listKey: string }> = {
   referral: {
@@ -54,6 +54,11 @@ const DETAIL_DIALOGS: Record<DetailDialogKind, { title: string; description: str
     title: "Viewings Booked",
     description: "Leads who booked a property viewing in this period.",
     listKey: "viewingsBookedList",
+  },
+  emailHandover: {
+    title: "Agent Copied In (Email)",
+    description: "Leads whose email Chloe couldn't fully answer, so she copied the agent in.",
+    listKey: "emailHandoverLeadsList",
   },
 };
 
@@ -226,6 +231,70 @@ export default function Dashboard() {
           </Card>
         </div>
 
+        {/* Text vs Email */}
+        <div className="space-y-3">
+          <h2 className="font-display font-semibold text-lg">Text vs Email</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="rounded-xl border-border/50 bg-card/50">
+              <CardContent className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><UserPlus size={14} /> First contact</p>
+                <div className="flex justify-around text-center">
+                  <div>
+                    <p className="text-2xl font-bold flex items-center gap-1.5 justify-center"><MessageSquare size={18} className="text-blue-500" />{metrics?.firstContactByChannel?.sms ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">by text</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold flex items-center gap-1.5 justify-center"><Mail size={18} className="text-orange-500" />{metrics?.firstContactByChannel?.email ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">by email</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-xl border-border/50 bg-card/50">
+              <CardContent className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><MessageSquare size={14} className="text-blue-500" /> Texts</p>
+                <div className="flex justify-around text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.textsSent ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">sent</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.textsReceived ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">received</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.reengagedByChannel?.sms ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">follow-ups</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-xl border-border/50 bg-card/50">
+              <CardContent className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1.5"><Mail size={14} className="text-orange-500" /> Emails</p>
+                <div className="flex justify-around text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.emailsSent ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">sent</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.emailsReceived ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">received</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.reengagedByChannel?.email ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1">follow-ups</p>
+                  </div>
+                  <button className="group" onClick={() => setDetailDialog("emailHandover")}>
+                    <p className="text-2xl font-bold">{metrics?.emailHandoverLeads ?? 0}</p>
+                    <p className="text-xs text-muted-foreground mt-1 underline decoration-dotted underline-offset-2">agent copied in</p>
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
         {/* Charts Section */}
         <div className="grid grid-cols-1 gap-6">
 
@@ -233,6 +302,7 @@ export default function Dashboard() {
           <Card className="rounded-2xl border-border/50 shadow-md">
             <CardContent className="p-6">
               <h3 className="font-display font-semibold mb-6 text-lg">New Conversations (Last 7 Days)</h3>
+              <p className="text-xs text-muted-foreground -mt-4 mb-4">Enquiries received, and how Chloe first contacted them.</p>
               <div className="h-[300px] w-full">
                 {isLoading ? (
                   <div className="w-full h-full bg-muted/20 animate-pulse rounded-xl" />
@@ -258,7 +328,11 @@ export default function Dashboard() {
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                         labelFormatter={(val) => format(parseISO(val), 'MMMM d, yyyy')}
                       />
+                      <Legend verticalAlign="top" height={32} />
+                      <Line type="monotone" dataKey="sms" name="First contact by text" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="email" name="First contact by email" stroke="#f97316" strokeWidth={2} dot={{ r: 3 }} />
                       <Line
+                        name="Enquiries"
                         type="monotone"
                         dataKey="count"
                         stroke="hsl(var(--primary))"

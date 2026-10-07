@@ -375,13 +375,21 @@ components:
       properties:
         id:
           type: string
-          description: Phone number used as conversation ID
+          description: 'Phone number, or "email:<address>" for a lead with no phone' 
         contactId:
           type: string
         contactName:
           type: string
         contactPhone:
           type: string
+        contactEmail:
+          type: string
+          description: Customer email, if known
+        channels:
+          type: array
+          items:
+            type: string
+          description: "Every channel used with this contact: sms, email"
         channel:
           type: string
           description: "whatsapp, sms, email"
@@ -426,6 +434,14 @@ components:
           type: string
         contactPhone:
           type: string
+        contactEmail:
+          type: string
+          description: Customer email, if known
+        channels:
+          type: array
+          items:
+            type: string
+          description: "Every channel used with this contact: sms, email"
         channel:
           type: string
         status:
@@ -493,6 +509,22 @@ components:
         senderName:
           type: string
           nullable: true
+        channel:
+          type: string
+          description: "sms, email"
+        subject:
+          type: string
+          nullable: true
+          description: Email subject (email only)
+        cc:
+          type: array
+          items:
+            type: string
+          description: Addresses copied in (email only)
+        emailAction:
+          type: string
+          nullable: true
+          description: "Chloe's action on an email: answer, partial or handover (the last two copy the agent in)"
       required:
         - id
         - conversationId
