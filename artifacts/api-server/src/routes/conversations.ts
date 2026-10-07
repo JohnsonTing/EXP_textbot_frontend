@@ -7,6 +7,9 @@ import {
   updateCustomer,
   putCustomer,
   buildCustomerName,
+  conversationKey,
+  messageChannel,
+  EMAIL_KEY_PREFIX,
   type DynamoMessage,
   type DynamoCustomer,
 } from "../lib/dynamodb";
@@ -25,12 +28,34 @@ function filterCustomersByAgent(customers: DynamoCustomer[], req: Request): Dyna
 
 const router: IRouter = Router();
 
+type CustomerSummary = { name: string; phone: string; email: string; customerId: string; botPaused: boolean };
+
+function summarise(c: DynamoCustomer, key: string): CustomerSummary {
+  const name = buildCustomerName(c);
+  return {
+    name: name !== "Unknown" ? name : (c.email || c.phone || key),
+    phone: c.phone ?? "",
+    email: c.email ?? "",
+    customerId: c.customer_id,
+    botPaused: c.bot_paused ?? false,
+  };
+}
+
+// The conversation key is the phone, or "email:<address>" for a lead with no phone.
+function findCustomerByKey(customers: DynamoCustomer[], key: string): DynamoCustomer | undefined {
+  return customers.find((c) => conversationKey(c) === key)
+    ?? (key.startsWith(EMAIL_KEY_PREFIX)
+      ? customers.find((c) => (c.email ?? "").trim().toLowerCase() === key.slice(EMAIL_KEY_PREFIX.length))
+      : undefined);
+}
+
+function channelsOf(messages: DynamoMessage[]): string[] {
+  return Array.from(new Set(messages.map(messageChannel))).sort();
+}
+
 function buildConversationList(
   grouped: Record<string, DynamoMessage[]>,
-  customers: Record<
-    string,
-    { name: string; phone: string; customerId: string; botPaused: boolean }
-  >,
+  customers: Record<string, CustomerSummary>,
 ) {
   return Object.entries(grouped)
     .map(([phone, messages]) => {
@@ -50,12 +75,16 @@ function buildConversationList(
         .slice(lastOutboundIdx + 1)
         .filter((m) => m.role === "user").length;
 
+      const isEmailKey = phone.startsWith(EMAIL_KEY_PREFIX);
       return {
         id: phone,
         contactId: customer?.customerId ?? phone,
-        contactName: customer?.name ?? phone,
-        contactPhone: phone,
-        channel: "whatsapp",
+        contactName: customer?.name ?? (isEmailKey ? phone.slice(EMAIL_KEY_PREFIX.length) : phone),
+        contactPhone: customer?.phone ?? (isEmailKey ? "" : phone),
+        contactEmail: customer?.email ?? (isEmailKey ? phone.slice(EMAIL_KEY_PREFIX.length) : ""),
+        // Channel of the latest message; channels = every channel used with them
+        channel: last ? messageChannel(last) : "sms",
+        channels: channelsOf(messages),
         status: "active",
         botPaused: customer?.botPaused ?? false,
         lastMessage: last?.message ?? null,
@@ -74,7 +103,7 @@ function buildConversationList(
 
 router.get("/conversations", async (req, res) => {
   try {
-    const { search } = req.query as Record<string, string>;
+    const { search, channel } = req.query as Record<string, string>;
 
     const [grouped, rawCustomers] = await Promise.all([
       scanAllConversationsByPhone(),
@@ -83,31 +112,29 @@ router.get("/conversations", async (req, res) => {
 
     const allCustomers = filterCustomersByAgent(rawCustomers, req);
 
-    const customersByPhone: Record<
-      string,
-      { name: string; phone: string; customerId: string; botPaused: boolean }
-    > = {};
+    const customersByKey: Record<string, CustomerSummary> = {};
     for (const c of allCustomers) {
-      const ph = c.phone;
-      if (ph) {
-        const name = buildCustomerName(c) !== "Unknown" ? buildCustomerName(c) : ph;
-        customersByPhone[ph] = { name, phone: ph, customerId: c.customer_id, botPaused: c.bot_paused ?? false };
-      }
+      const key = conversationKey(c);
+      if (key) customersByKey[key] = summarise(c, key);
     }
 
-    const agentPhones = new Set(Object.keys(customersByPhone));
+    const agentKeys = new Set(Object.keys(customersByKey));
     const filteredGrouped = req.user?.role === "admin"
       ? grouped
-      : Object.fromEntries(Object.entries(grouped).filter(([phone]) => agentPhones.has(phone)));
+      : Object.fromEntries(Object.entries(grouped).filter(([key]) => agentKeys.has(key)));
 
-    let result = buildConversationList(filteredGrouped, customersByPhone);
+    let result = buildConversationList(filteredGrouped, customersByKey);
 
+    if (channel && channel !== "all") {
+      result = result.filter((r) => r.channels.includes(channel));
+    }
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
         (r) =>
           r.contactName.toLowerCase().includes(q) ||
           r.contactPhone.includes(q) ||
+          r.contactEmail.toLowerCase().includes(q) ||
           (r.lastMessage ?? "").toLowerCase().includes(q),
       );
     }
@@ -119,8 +146,6 @@ router.get("/conversations", async (req, res) => {
   }
 });
 
-const findCustomerByPhone = (customers: Awaited<ReturnType<typeof scanCustomers>>, phone: string) =>
-  customers.find((c) => c.phone === phone);
 
 router.get("/conversations/:phone", async (req, res) => {
   try {
@@ -131,11 +156,11 @@ router.get("/conversations/:phone", async (req, res) => {
       scanCustomers(),
     ]);
 
-    const customer = findCustomerByPhone(allCustomers, phone);
+    const customer = findCustomerByKey(allCustomers, phone);
 
     if (req.user?.role !== "admin") {
       const agentCustomers = filterCustomersByAgent(allCustomers, req);
-      const owned = agentCustomers.some((c) => c.phone === phone);
+      const owned = agentCustomers.some((c) => conversationKey(c) === phone);
       if (!owned) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -147,6 +172,7 @@ router.get("/conversations/:phone", async (req, res) => {
         new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
     );
 
+    const contactName = customer ? summarise(customer, phone).name : phone.replace(EMAIL_KEY_PREFIX, "");
     const mappedMessages = sorted.map((m) => ({
       id: m.message_id,
       conversationId: phone,
@@ -156,11 +182,17 @@ router.get("/conversations/:phone", async (req, res) => {
       sender: m.sender ?? (m.role === "user" ? "customer" : "chloe"),
       senderName:
         m.role === "user"
-          ? (customer ? buildCustomerName(customer) : phone)
+          ? contactName
           : m.sender === "agent"
-            ? (m.sender_name || "Agent")
+            ? (m.sender_name || m.email_from || "Agent")
             : "Chloe",
       sentAt: m.timestamp,
+      channel: messageChannel(m),
+      // Email only
+      subject: m.email_subject ?? null,
+      cc: m.email_cc ?? [],
+      // Chloe copied the agent in: partial (couldn't answer everything) / handover
+      emailAction: m.email_action ?? null,
     }));
 
     const last = sorted[sorted.length - 1];
@@ -168,9 +200,11 @@ router.get("/conversations/:phone", async (req, res) => {
     res.json({
       id: phone,
       contactId: customer?.customer_id ?? phone,
-      contactName: customer ? buildCustomerName(customer) : phone,
-      contactPhone: phone,
-      channel: "whatsapp",
+      contactName,
+      contactPhone: customer?.phone ?? (phone.startsWith(EMAIL_KEY_PREFIX) ? "" : phone),
+      contactEmail: customer?.email ?? (phone.startsWith(EMAIL_KEY_PREFIX) ? phone.slice(EMAIL_KEY_PREFIX.length) : ""),
+      channel: last ? messageChannel(last) : "sms",
+      channels: channelsOf(sorted),
       status: "active",
       botPaused: customer?.bot_paused ?? false,
       lastMessage: last?.message ?? null,
@@ -188,7 +222,7 @@ router.get("/conversations/:phone", async (req, res) => {
 router.get("/conversations/:phone/bot-status", async (req, res) => {
   try {
     const phone = decodeURIComponent(req.params.phone);
-    const customer = findCustomerByPhone(await scanCustomers(), phone);
+    const customer = findCustomerByKey(await scanCustomers(), phone);
     if (!customer) {
       res.status(404).json({ error: "Customer not found" });
       return;
@@ -205,7 +239,11 @@ router.patch("/conversations/:phone/bot-mode", async (req, res) => {
     const phone = decodeURIComponent(req.params.phone);
     const { paused } = req.body as { paused: boolean };
 
-    let customer = findCustomerByPhone(await scanCustomers(), phone);
+    let customer = findCustomerByKey(await scanCustomers(), phone);
+    if (!customer && phone.startsWith(EMAIL_KEY_PREFIX)) {
+      res.status(404).json({ error: "Customer not found" });
+      return;
+    }
     if (!customer) {
       const now = new Date().toISOString();
       await putCustomer({ customer_id: randomUUID(), phone, created_at: now, updated_at: now, bot_paused: paused });
@@ -235,6 +273,15 @@ router.post("/conversations/:phone/messages", async (req, res) => {
 
     if (!content || typeof content !== "string" || !content.trim()) {
       res.status(400).json({ error: "content is required" });
+      return;
+    }
+
+    // Replies from the dashboard go by text (the bot's /send). A lead we only
+    // have an email address for has to be answered from the agent's inbox.
+    if (phone.startsWith(EMAIL_KEY_PREFIX)) {
+      res.status(400).json({
+        error: "This lead has no phone number. Reply from your inbox (reply-all on Chloe's email).",
+      });
       return;
     }
 
@@ -295,6 +342,7 @@ router.post("/conversations/:phone/messages", async (req, res) => {
       content: content.trim(),
       senderName: req.user?.name || "Agent",
       sentAt: now,
+      channel: "sms",
     });
   } catch (err) {
     req.log.error({ err }, "Failed to send message");

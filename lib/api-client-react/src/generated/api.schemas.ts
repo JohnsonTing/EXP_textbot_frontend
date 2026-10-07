@@ -62,11 +62,15 @@ export interface UpdateContactRequest {
 }
 
 export interface Conversation {
-  /** Phone number used as conversation ID */
+  /** Phone number, or "email:<address>" for a lead with no phone */
   id: string;
   contactId: string;
   contactName: string;
   contactPhone: string;
+  /** Customer email, if known */
+  contactEmail?: string;
+  /** Every channel used with this contact: sms, email */
+  channels?: string[];
   /** whatsapp, sms, email */
   channel: string;
   /** active, closed, pending */
@@ -76,8 +80,6 @@ export interface Conversation {
   botPaused: boolean;
   unreadCount: number;
   messageCount?: number;
-  /** true = agent manually handling, bot is off */
-  botPaused?: boolean;
   createdAt: string;
 }
 
@@ -92,6 +94,14 @@ export interface Message {
   content: string;
   sentAt: string;
   senderName?: string | null;
+  /** sms, email */
+  channel?: string;
+  /** Email subject (email only) */
+  subject?: string | null;
+  /** Addresses copied in (email only) */
+  cc?: string[];
+  /** Chloe's action on an email: answer, partial or handover (the last two copy the agent in) */
+  emailAction?: string | null;
 }
 
 export interface ConversationDetail {
@@ -99,6 +109,10 @@ export interface ConversationDetail {
   contactId: string;
   contactName: string;
   contactPhone: string;
+  /** Customer email, if known */
+  contactEmail?: string;
+  /** Every channel used with this contact: sms, email */
+  channels?: string[];
   channel: string;
   status: string;
   lastMessage?: string | null;

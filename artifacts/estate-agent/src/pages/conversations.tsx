@@ -18,12 +18,14 @@ export default function Conversations() {
   const [search, setSearch] = useState("");
   const [activePhone, setActivePhone] = useState<string | null>(null);
   const [botFilter, setBotFilter] = useState<"all" | "manual" | "bot">("all");
+  const [channelFilter, setChannelFilter] = useState<"all" | "sms" | "email">("all");
 
   const searchString = useSearch();
   const phoneParam = useMemo(() => new URLSearchParams(searchString).get("phone"), [searchString]);
 
   const { data: conversations = [], isLoading: isLoadingConversations } = useListConversations({
     search: search || undefined,
+    channel: channelFilter === "all" ? undefined : channelFilter,
   });
 
   const filteredConversations = conversations.filter((conv) => {
@@ -72,12 +74,13 @@ export default function Conversations() {
     }
   };
 
+  const contactId = activeConversation?.contactId ?? "";
   const { data: contactProfile } = useGetContact(
-    activePhone ? encodeURIComponent(activePhone) : "",
-    { query: { enabled: !!activePhone && profileOpen } }
+    encodeURIComponent(contactId),
+    { query: { enabled: !!contactId && profileOpen } }
   );
   const [optimisticMessages, setOptimisticMessages] = useState<
-    { id: string; direction: string; content: string; sentAt: string; role: string; senderName: string; conversationId: string }[]
+    { id: string; direction: string; content: string; sentAt: string; role: string; senderName: string; conversationId: string; channel: string; subject?: string | null; cc?: string[]; emailAction?: string | null }[]
   >([]);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
@@ -116,6 +119,7 @@ export default function Conversations() {
       content: text,
       senderName: "You",
       sentAt: new Date().toISOString(),
+      channel: "sms",
     };
     setOptimisticMessages((prev) => [...prev, optimistic]);
 
@@ -143,14 +147,18 @@ export default function Conversations() {
     return format(d, "dd/MM/yy");
   };
 
-  const getChannelIcon = (channel: string) => {
+  const getChannelIcon = (channel: string, size = 14) => {
     switch (channel.toLowerCase()) {
-      case "whatsapp": return <MessageCircle size={14} className="text-green-500" />;
-      case "sms": return <MessageSquare size={14} className="text-blue-500" />;
-      case "email": return <Mail width={14} height={14} className="text-orange-500" />;
-      default: return <MessageSquare size={14} className="text-gray-500" />;
+      case "whatsapp": return <MessageCircle size={size} className="text-green-500" />;
+      case "sms": return <MessageSquare size={size} className="text-blue-500" />;
+      case "email": return <Mail width={size} height={size} className="text-orange-500" />;
+      default: return <MessageSquare size={size} className="text-gray-500" />;
     }
   };
+  const channelLabel = (channel: string) => (channel === "email" ? "Email" : "Text");
+
+  const activeChannels = activeConversation?.channels ?? [];
+  const canText = !!activeConversation?.contactPhone;
 
   return (
     <Layout>
@@ -294,6 +302,19 @@ export default function Conversations() {
               <Badge onClick={() => setBotFilter("manual")} variant="secondary" className={`rounded-full cursor-pointer transition-colors ${botFilter === "manual" ? "bg-orange-100 text-orange-600 border border-orange-200 hover:bg-orange-100" : "bg-transparent border border-border hover:bg-muted text-foreground"}`}>Manual Mode</Badge>
               <Badge onClick={() => setBotFilter("bot")} variant="secondary" className={`rounded-full cursor-pointer transition-colors ${botFilter === "bot" ? "bg-green-100 text-green-700 border border-green-200 hover:bg-green-100" : "bg-transparent border border-border hover:bg-muted text-foreground"}`}>Bot Active</Badge>
             </div>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+              {([["all", "All channels"], ["sms", "Text"], ["email", "Email"]] as const).map(([value, label]) => (
+                <Badge
+                  key={value}
+                  onClick={() => setChannelFilter(value)}
+                  variant="secondary"
+                  className={`rounded-full cursor-pointer transition-colors inline-flex items-center gap-1 ${channelFilter === value ? "bg-primary/10 text-primary hover:bg-primary/20" : "bg-transparent border border-border hover:bg-muted text-foreground"}`}
+                >
+                  {value !== "all" && getChannelIcon(value, 11)}
+                  {label}
+                </Badge>
+              ))}
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -333,8 +354,10 @@ export default function Conversations() {
                           {conv.contactName.substring(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 shadow-sm border border-border">
-                        {getChannelIcon(conv.channel)}
+                      <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-0.5 shadow-sm border border-border flex gap-0.5">
+                        {(conv.channels?.length ? conv.channels : [conv.channel]).map((ch) => (
+                          <span key={ch} title={channelLabel(ch)}>{getChannelIcon(ch)}</span>
+                        ))}
                       </div>
                     </div>
 
@@ -393,11 +416,15 @@ export default function Conversations() {
                     </Avatar>
                     <div>
                       <h3 className="font-semibold text-foreground">{activeConversation.contactName}</h3>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Phone size={12} />
-                        <span>{activeConversation.contactPhone}</span>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                        {activeConversation.contactPhone && (
+                          <span className="inline-flex items-center gap-1"><Phone size={12} />{activeConversation.contactPhone}</span>
+                        )}
+                        {activeConversation.contactEmail && (
+                          <span className="inline-flex items-center gap-1"><Mail size={12} />{activeConversation.contactEmail}</span>
+                        )}
                         <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-                        <span className="capitalize">{activeConversation.channel}</span>
+                        <span>{(activeChannels.length ? activeChannels : [activeConversation.channel]).map(channelLabel).join(" · ")}</span>
                       </div>
                     </div>
                   </div>
@@ -469,7 +496,19 @@ export default function Conversations() {
                                 : "bg-card text-card-foreground border border-border/50 rounded-tl-sm"}
                             `}
                           >
-                            <div className="text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-li:my-0 prose-headings:my-1 prose-a:underline [&_a]:break-all">
+                            {msg.channel === "email" && (msg.subject || (msg.cc?.length ?? 0) > 0) && (
+                              <div className={`text-[11px] mb-2 pb-2 border-b space-y-0.5 ${isOutbound ? "border-primary-foreground/20 text-primary-foreground/80" : "border-border/50 text-muted-foreground"}`}>
+                                {msg.subject && <p className="font-semibold truncate">{msg.subject}</p>}
+                                {(msg.cc?.length ?? 0) > 0 && (
+                                  <p>
+                                    Copied in: {msg.cc!.join(", ")}
+                                    {msg.emailAction === "partial" && " (Chloe couldn't answer everything)"}
+                                    {msg.emailAction === "handover" && " (handed over to agent)"}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                            <div className={`text-sm leading-relaxed prose prose-sm max-w-none prose-p:my-1 prose-li:my-0 prose-headings:my-1 prose-a:underline [&_a]:break-all ${msg.channel === "email" ? "whitespace-pre-line" : ""}`}>
                               <ReactMarkdown
                                 components={{
                                   a: ({ href, children }) => (
@@ -482,7 +521,9 @@ export default function Conversations() {
                                 {msg.content}
                               </ReactMarkdown>
                             </div>
-                            <div className={`text-[10px] mt-1.5 text-right opacity-60 ${isOutbound ? "text-primary-foreground" : "text-muted-foreground"}`}>
+                            <div className={`text-[10px] mt-1.5 text-right opacity-60 inline-flex items-center gap-1 w-full justify-end ${isOutbound ? "text-primary-foreground" : "text-muted-foreground"}`}>
+                              {msg.channel === "email" ? <Mail size={10} /> : <MessageSquare size={10} />}
+                              {channelLabel(msg.channel ?? "sms")} ·{" "}
                               {isOutbound && msg.senderName ? `${msg.senderName} · ` : ""}
                               {format(msgDate, "HH:mm")}
                             </div>
@@ -501,11 +542,24 @@ export default function Conversations() {
                       {sendError}
                     </div>
                   )}
+                  {!canText ? (
+                    <div className="px-4 py-3 bg-muted/40 text-muted-foreground text-sm rounded-xl border border-border/50 max-w-4xl mx-auto flex items-center gap-2">
+                      <Mail size={16} className="shrink-0" />
+                      This lead has no phone number. Reply from your inbox by replying all on Chloe's email.
+                    </div>
+                  ) : (
+                  <>
+                  {activeChannels.includes("email") && (
+                    <p className="mb-2 text-xs text-muted-foreground max-w-4xl mx-auto flex items-center gap-1.5">
+                      <MessageSquare size={12} className="shrink-0" />
+                      Replies from here go by text. To reply by email, reply all on Chloe's email in your inbox.
+                    </p>
+                  )}
                   <form onSubmit={handleSendMessage} className="flex items-end gap-3 max-w-4xl mx-auto">
                     <div className="flex-1 relative bg-muted/30 rounded-2xl border border-border/50 focus-within:border-primary/50 focus-within:bg-card focus-within:shadow-md transition-all duration-200">
                       <textarea
                         className="w-full bg-transparent p-4 outline-none resize-none max-h-32 text-sm"
-                        placeholder="Type a reply..."
+                        placeholder="Reply by text..."
                         rows={1}
                         value={messageText}
                         onChange={(e) => setMessageText(e.target.value)}
@@ -529,6 +583,8 @@ export default function Conversations() {
                       )}
                     </Button>
                   </form>
+                  </>
+                  )}
                 </div>
               </>
             ) : null

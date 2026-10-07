@@ -1,8 +1,6 @@
 import { Router, type IRouter } from "express";
-import { getDynamoClient, CUSTOMERS_TABLE, CONVERSATIONS_TABLE, buildCustomerName, DynamoCustomer } from "../lib/dynamodb";
+import { getDynamoClient, CUSTOMERS_TABLE, CONVERSATIONS_TABLE, METRICS_TABLE, buildCustomerName, DynamoCustomer } from "../lib/dynamodb";
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
-
-const METRICS_TABLE = "EXP_agent_metrics";
 
 async function fullScan(tableName: string): Promise<Record<string, unknown>[]> {
   const client = getDynamoClient();
@@ -178,23 +176,61 @@ router.get("/dashboard/metrics", async (req, res) => {
         }
       });
 
-    const newConversationsLastWeek: { date: string; count: number }[] = [];
+    // --- Text vs email ---
+    // Conversations rows: email rows carry channel "email"; SMS rows have no channel.
+    const periodMessages = since
+      ? conversations.filter((m) => typeof m.timestamp === "string" && m.timestamp >= since)
+      : conversations;
+    const messageCounts = { textsSent: 0, textsReceived: 0, emailsSent: 0, emailsReceived: 0 };
+    for (const m of periodMessages) {
+      const email = m.channel === "email";
+      const fromCustomer = m.role === "user";
+      if (email) fromCustomer ? messageCounts.emailsReceived++ : messageCounts.emailsSent++;
+      else fromCustomer ? messageCounts.textsReceived++ : messageCounts.textsSent++;
+    }
+    const messagesByChannel = [
+      { channel: "sms", count: messageCounts.textsSent + messageCounts.textsReceived },
+      { channel: "email", count: messageCounts.emailsSent + messageCounts.emailsReceived },
+    ];
+
+    // Which channel Chloe first contacted / re-engaged each lead on. Events from
+    // before the email channel have no metadata.channel: those were texts.
+    const eventChannel = (e: Record<string, unknown>) =>
+      (e.metadata as Record<string, unknown> | undefined)?.channel === "email" ? "email" : "sms";
+    const customersByEventChannel = (type: string) => {
+      const out = { sms: new Set<unknown>(), email: new Set<unknown>() };
+      for (const e of metricEvents) if (e.event_type === type) out[eventChannel(e)].add(e.customer_id);
+      return { sms: out.sms.size, email: out.email.size };
+    };
+    const firstContactByChannel = customersByEventChannel("first_message_sent");
+    const reengagedByChannel = customersByEventChannel("reengagement_sent");
+
+    // Chloe copied the agent into an email because she couldn't answer
+    const emailHandoverEvents = metricEvents.filter((e) => e.event_type === "email_handover");
+    const emailHandoverLeadsList = detailListFromEvents(emailHandoverEvents, customersById, customersByPhone);
+
+    // First contacts per day, split by channel (chart)
+    const firstContactsByDay: Record<string, { sms: number; email: number }> = {};
+    metricEvents
+      .filter((e) => e.event_type === "first_message_sent")
+      .forEach((e) => {
+        const day = (e.timestamp as string).split("T")[0];
+        if (day < sevenDaysAgoStr) return;
+        firstContactsByDay[day] ??= { sms: 0, email: 0 };
+        firstContactsByDay[day][eventChannel(e)]++;
+      });
+
+    const newConversationsLastWeek: { date: string; count: number; sms: number; email: number }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const dateStr = d.toISOString().split("T")[0];
-      newConversationsLastWeek.push({ date: dateStr, count: enquiriesByDay[dateStr] ?? 0 });
-    }
-
-    // --- Messages by channel (from conversations) ---
-    const channelMap: Record<string, number> = {};
-    conversations.forEach((c) => {
-      const ch: string = (c.channel as string) || "whatsapp";
-      channelMap[ch] = (channelMap[ch] ?? 0) + 1;
-    });
-    const messagesByChannel = Object.entries(channelMap).map(([channel, count]) => ({ channel, count }));
-    if (messagesByChannel.length === 0) {
-      messagesByChannel.push({ channel: "whatsapp", count: 0 });
+      newConversationsLastWeek.push({
+        date: dateStr,
+        count: enquiriesByDay[dateStr] ?? 0,
+        sms: firstContactsByDay[dateStr]?.sms ?? 0,
+        email: firstContactsByDay[dateStr]?.email ?? 0,
+      });
     }
 
     // --- ROI ---
@@ -232,6 +268,11 @@ router.get("/dashboard/metrics", async (req, res) => {
       timeSavingsHours: Math.round(timeSavingsHours * 100) / 100,
       newConversationsLastWeek,
       messagesByChannel,
+      ...messageCounts,
+      firstContactByChannel,
+      reengagedByChannel,
+      emailHandoverLeads: emailHandoverLeadsList.length,
+      emailHandoverLeadsList,
       funnel,
     });
   } catch (err) {

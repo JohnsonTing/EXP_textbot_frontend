@@ -2,9 +2,13 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, ScanCommand, GetCommand, PutCommand, UpdateCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
-export const CUSTOMERS_TABLE = "Customers";
-export const CONVERSATIONS_TABLE = "Conversations";
-export const AGENTS_TABLE = "EXP_agents";
+// Live tables by default. TABLE_SUFFIX=-dev points the dashboard at the bot's
+// dev stack (Customers-dev, Conversations-dev, ...) for testing.
+const TABLE_SUFFIX = process.env.TABLE_SUFFIX || "";
+export const CUSTOMERS_TABLE = `Customers${TABLE_SUFFIX}`;
+export const CONVERSATIONS_TABLE = `Conversations${TABLE_SUFFIX}`;
+export const AGENTS_TABLE = `EXP_agents${TABLE_SUFFIX}`;
+export const METRICS_TABLE = `EXP_agent_metrics${TABLE_SUFFIX}`;
 
 function createClient() {
   const client = new DynamoDBClient({
@@ -165,6 +169,28 @@ export interface DynamoMessage {
   sender?: string;
   sender_agent_id?: string;
   sender_name?: string;
+  // Email rows (bot's email channel). SMS rows have no channel field.
+  channel?: string;
+  direction?: string;
+  email_from?: string;
+  email_subject?: string;
+  email_cc?: string[];
+  email_action?: string;
+  thread_key?: string;
+}
+
+// The bot keys every message by the customer's phone when it has one, so texts
+// and emails with the same person land in one conversation. A lead with no
+// phone is keyed "email:<address>".
+export const EMAIL_KEY_PREFIX = "email:";
+
+export function messageChannel(m: Pick<DynamoMessage, "channel">): "sms" | "email" {
+  return m.channel === "email" ? "email" : "sms";
+}
+
+export function conversationKey(c: DynamoCustomer): string | null {
+  if (c.phone) return c.phone;
+  return c.email ? `${EMAIL_KEY_PREFIX}${c.email.trim().toLowerCase()}` : null;
 }
 
 export async function scanAllConversationsByPhone(): Promise<Record<string, DynamoMessage[]>> {
