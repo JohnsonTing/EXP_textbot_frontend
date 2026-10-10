@@ -13,18 +13,7 @@ import {
   type DynamoMessage,
   type DynamoCustomer,
 } from "../lib/dynamodb";
-import type { Request } from "express";
-
-function filterCustomersByAgent(customers: DynamoCustomer[], req: Request): DynamoCustomer[] {
-  if (req.user?.role === "admin") return customers;
-  const agentId = req.user?.agent_id;
-  const agentEmail = req.user?.email;
-  return customers.filter((c) => {
-    if (agentId && c.responsible_agent_id && String(c.responsible_agent_id) === String(agentId)) return true;
-    if (c.responsible_agent_email === agentEmail) return true;
-    return false;
-  });
-}
+import { filterCustomersByAgent } from "../lib/agentScope";
 
 const router: IRouter = Router();
 
