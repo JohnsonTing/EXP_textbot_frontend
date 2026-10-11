@@ -128,22 +128,26 @@ router.get("/dashboard/metrics", async (req, res) => {
 
     // The bot once logged viewings on an agent's own listing as referrals (the listing feed and the
     // agent record spelt the agent's email differently) — those aren't referrals in either direction.
-    const agentEmailById = new Map(
-      everyAgent.map((a) => [String(a.agent_id), String(a.email ?? "").trim().toLowerCase()])
-    );
-    const referredToEmail = (e: Record<string, unknown>) => {
-      const to = (e.metadata as Record<string, unknown> | undefined)?.referred_to_agent_email;
-      return typeof to === "string" ? to.trim().toLowerCase() : "";
+    // The feed writes the domain as expuk.com where agent records have exp.uk.com, so compare emails
+    // with the dots in the domain ignored.
+    const emailKey = (email: unknown) => {
+      if (typeof email !== "string" || !email.trim()) return "";
+      const [local, domain = ""] = email.trim().toLowerCase().split("@");
+      return `${local}@${domain.replace(/\./g, "")}`;
     };
+    const agentEmailById = new Map(everyAgent.map((a) => [String(a.agent_id), emailKey(a.email)]));
+    const referredToEmail = (e: Record<string, unknown>) =>
+      emailKey((e.metadata as Record<string, unknown> | undefined)?.referred_to_agent_email);
     const isReferral = (e: Record<string, unknown>) =>
-      e.event_type === "referral" && referredToEmail(e) !== agentEmailById.get(String(e.agent_id));
+      e.event_type === "referral" &&
+      (!referredToEmail(e) || referredToEmail(e) !== agentEmailById.get(String(e.agent_id)));
 
     // Referrals out: this agent's leads the bot sent to another agent's listing.
     const referralEvents = metricEvents.filter(isReferral);
     const referralCustomers = new Set(referralEvents.map((e) => e.customer_id));
 
     // Referrals in: other agents' leads the bot sent to this agent's listing.
-    const myEmail = req.user?.email?.trim().toLowerCase();
+    const myEmail = emailKey(req.user?.email);
     const periodEveryEvent = since
       ? everyMetricEvent.filter((e) => typeof e.timestamp === "string" && e.timestamp >= since)
       : everyMetricEvent;
