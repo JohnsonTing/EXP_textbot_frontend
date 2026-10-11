@@ -32,22 +32,22 @@ interface MetricDetailEntry {
   timestamp: string;
 }
 
-type DetailDialogKind = "referral" | "ownPropertyReferral" | "reengagementReferral" | "viewing" | "emailHandover";
+type DetailDialogKind = "referral" | "incomingReferral" | "reengagementReferral" | "viewing" | "emailHandover";
 
 const DETAIL_DIALOGS: Record<DetailDialogKind, { title: string; description: string; listKey: string }> = {
   referral: {
-    title: "Referrals",
-    description: "Leads referred to another agent in this period.",
+    title: "Referrals Out",
+    description: "Your leads referred to another agent's property in this period.",
     listKey: "referralLeadsList",
   },
-  ownPropertyReferral: {
-    title: "Other Property Referrals",
-    description: "Leads the bot pointed to your other properties in this period.",
-    listKey: "ownPropertyReferralLeadsList",
+  incomingReferral: {
+    title: "Referrals In",
+    description: "Other agents' leads referred to your property in this period.",
+    listKey: "incomingReferralLeadsList",
   },
   reengagementReferral: {
     title: "Booked from Reengagement",
-    description: "Reengaged leads who were then referred to another agent or to your other properties in this period.",
+    description: "Reengaged leads who were then referred to another agent in this period.",
     listKey: "reengagementReferralLeadsList",
   },
   viewing: {
@@ -137,6 +137,11 @@ export default function Dashboard() {
                   Referred to {String(e.metadata.referred_to_agent_email)}
                 </p>
               ) : null}
+              {e.metadata?.referred_by_agent ? (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Lead from {String(e.metadata.referred_by_agent)}
+                </p>
+              ) : null}
               {e.metadata?.property_url ? (
                 <a
                   href={String(e.metadata.property_url)}
@@ -185,8 +190,8 @@ export default function Dashboard() {
 
         {/* Top High-Impact Metrics */}
         <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6">
-          {renderMetricCard("Referrals", metrics?.referralLeads || 0, <Handshake size={24} />, undefined, "text-pink-600", "bg-pink-100", () => setDetailDialog("referral"))}
-          {renderMetricCard("Other Property Referrals", metrics?.ownPropertyReferralLeads || 0, <Building2 size={24} />, undefined, "text-amber-600", "bg-amber-100", () => setDetailDialog("ownPropertyReferral"))}
+          {renderMetricCard("Referrals Out", metrics?.referralLeads || 0, <Handshake size={24} />, undefined, "text-pink-600", "bg-pink-100", () => setDetailDialog("referral"))}
+          {renderMetricCard("Referrals In", metrics?.incomingReferralLeads || 0, <Building2 size={24} />, undefined, "text-amber-600", "bg-amber-100", () => setDetailDialog("incomingReferral"))}
           {renderMetricCard("Booked from Reengagement", metrics?.reengagementReferralLeads || 0, <Repeat size={24} />, undefined, "text-emerald-600", "bg-emerald-100", () => setDetailDialog("reengagementReferral"))}
           {renderMetricCard("Viewings Booked", metrics?.viewingsBooked || 0, <CalendarCheck size={24} />, undefined, "text-blue-600", "bg-blue-100", () => setDetailDialog("viewing"))}
           {renderMetricCard("Reactivated", metrics?.reactivatedLeads || 0, <RefreshCw size={24} />, undefined, "text-indigo-600", "bg-indigo-100")}
