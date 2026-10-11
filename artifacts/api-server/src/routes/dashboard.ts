@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { getDynamoClient, CUSTOMERS_TABLE, CONVERSATIONS_TABLE, METRICS_TABLE, buildCustomerName, conversationKey, DynamoCustomer } from "../lib/dynamodb";
+import { getDynamoClient, CUSTOMERS_TABLE, CONVERSATIONS_TABLE, METRICS_TABLE, AGENTS_TABLE, buildCustomerName, conversationKey, DynamoCustomer } from "../lib/dynamodb";
 import { filterCustomersByAgent } from "../lib/agentScope";
 import { ScanCommand } from "@aws-sdk/lib-dynamodb";
 
@@ -57,10 +57,11 @@ router.get("/dashboard/metrics", async (req, res) => {
   try {
     const since = typeof req.query.since === "string" ? req.query.since : null;
 
-    const [everyCustomer, everyMetricEvent, everyMessage] = await Promise.all([
+    const [everyCustomer, everyMetricEvent, everyMessage, everyAgent] = await Promise.all([
       fullScan(CUSTOMERS_TABLE),
       fullScan(METRICS_TABLE),
       fullScan(CONVERSATIONS_TABLE),
+      fullScan(AGENTS_TABLE),
     ]);
 
     // Agents only see metrics for their own leads; admins see everything. Metric events carry the
@@ -125,8 +126,20 @@ router.get("/dashboard/metrics", async (req, res) => {
     const viewingEvents = metricEvents.filter((e) => e.event_type === "viewing_booked");
     const viewingCustomers = new Set(viewingEvents.map((e) => e.customer_id));
 
+    // The bot once logged viewings on an agent's own listing as referrals (the listing feed and the
+    // agent record spelt the agent's email differently) — those aren't referrals in either direction.
+    const agentEmailById = new Map(
+      everyAgent.map((a) => [String(a.agent_id), String(a.email ?? "").trim().toLowerCase()])
+    );
+    const referredToEmail = (e: Record<string, unknown>) => {
+      const to = (e.metadata as Record<string, unknown> | undefined)?.referred_to_agent_email;
+      return typeof to === "string" ? to.trim().toLowerCase() : "";
+    };
+    const isReferral = (e: Record<string, unknown>) =>
+      e.event_type === "referral" && referredToEmail(e) !== agentEmailById.get(String(e.agent_id));
+
     // Referrals out: this agent's leads the bot sent to another agent's listing.
-    const referralEvents = metricEvents.filter((e) => e.event_type === "referral");
+    const referralEvents = metricEvents.filter(isReferral);
     const referralCustomers = new Set(referralEvents.map((e) => e.customer_id));
 
     // Referrals in: other agents' leads the bot sent to this agent's listing.
@@ -135,10 +148,9 @@ router.get("/dashboard/metrics", async (req, res) => {
       ? everyMetricEvent.filter((e) => typeof e.timestamp === "string" && e.timestamp >= since)
       : everyMetricEvent;
     const incomingReferralEvents = periodEveryEvent.filter((e) => {
-      if (e.event_type !== "referral") return false;
+      if (!isReferral(e)) return false;
       if (isAdmin) return true;
-      const referredTo = (e.metadata as Record<string, unknown> | undefined)?.referred_to_agent_email;
-      return !!myEmail && typeof referredTo === "string" && referredTo.trim().toLowerCase() === myEmail;
+      return !!myEmail && referredToEmail(e) === myEmail;
     });
     const incomingReferralCustomers = new Set(incomingReferralEvents.map((e) => e.customer_id));
     const reactivatedCustomers = new Set(
